@@ -6,7 +6,8 @@ authors = ["Marcos Konzen <marcoskonzen@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.10"
+edge-sim-py = {git = "https://github.com/EdgeSimPy/EdgeSimPy.git", rev = "v1.1.0"}
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.8.0"
@@ -14,3 +15,6 @@ black = "^24.8.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 160
