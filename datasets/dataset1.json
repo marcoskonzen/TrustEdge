@@ -1,0 +1,3423 @@
+{
+    "NetworkSwitch": [
+        {
+            "attributes": {
+                "id": 1,
+                "coordinates": [
+                    0,
+                    0
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 13
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 1
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 2,
+                "coordinates": [
+                    2,
+                    0
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 6
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 2
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 3,
+                "coordinates": [
+                    4,
+                    0
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 14
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 3
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 4,
+                "coordinates": [
+                    6,
+                    0
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 3
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 4
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 5,
+                "coordinates": [
+                    1,
+                    1
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 7
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 5
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 6,
+                "coordinates": [
+                    3,
+                    1
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 5
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 6
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 7,
+                "coordinates": [
+                    5,
+                    1
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 8
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 7
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 8,
+                "coordinates": [
+                    7,
+                    1
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 15
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 8
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 9,
+                "coordinates": [
+                    0,
+                    2
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 12
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 9
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 10,
+                "coordinates": [
+                    2,
+                    2
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 10
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 10
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 11,
+                "coordinates": [
+                    4,
+                    2
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 16
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 11
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 12,
+                "coordinates": [
+                    6,
+                    2
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 9
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 12
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 13,
+                "coordinates": [
+                    1,
+                    3
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 2
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 13
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 14,
+                "coordinates": [
+                    3,
+                    3
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 1
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 14
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 15,
+                "coordinates": [
+                    5,
+                    3
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 11
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 15
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 16,
+                "coordinates": [
+                    7,
+                    3
+                ],
+                "active": true,
+                "power_model_parameters": {
+                    "chassis_power": 60,
+                    "ports_power_consumption": {
+                        "125": 1,
+                        "12.5": 0.3
+                    }
+                }
+            },
+            "relationships": {
+                "power_model": "ConteratoNetworkPowerModel",
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 4
+                    }
+                ],
+                "links": [],
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 16
+                }
+            }
+        }
+    ],
+    "NetworkLink": [
+        {
+            "attributes": {
+                "id": 1,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 1
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 5
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 2,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 1
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 2
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 3,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 2
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 5
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 4,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 2
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 6
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 5,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 2
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 3
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 6,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 3
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 6
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 7,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 3
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 7
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 8,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 3
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 4
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 9,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 4
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 7
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 10,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 4
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 8
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 11,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 5
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 9
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 12,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 5
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 10
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 13,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 5
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 6
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 14,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 6
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 10
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 15,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 6
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 11
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 16,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 6
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 7
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 17,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 7
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 11
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 18,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 7
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 12
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 19,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 7
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 8
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 20,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 8
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 12
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 21,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 9
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 13
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 22,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 9
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 10
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 23,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 10
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 13
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 24,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 10
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 14
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 25,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 10
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 11
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 26,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 11
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 14
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 27,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 11
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 15
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 28,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 11
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 12
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 29,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 12
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 15
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 30,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 12
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 16
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 31,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 13
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 14
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 32,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 14
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 15
+                    }
+                ]
+            }
+        },
+        {
+            "attributes": {
+                "id": 33,
+                "delay": 3,
+                "bandwidth": 12.5,
+                "bandwidth_demand": 0,
+                "active": true
+            },
+            "relationships": {
+                "topology": {
+                    "class": "Topology",
+                    "id": 1
+                },
+                "active_flows": [],
+                "applications": [],
+                "nodes": [
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 15
+                    },
+                    {
+                        "class": "NetworkSwitch",
+                        "id": 16
+                    }
+                ]
+            }
+        }
+    ],
+    "BaseStation": [
+        {
+            "attributes": {
+                "id": 1,
+                "coordinates": [
+                    0,
+                    0
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 13
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 1
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 2,
+                "coordinates": [
+                    2,
+                    0
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 6
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 2
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 3,
+                "coordinates": [
+                    4,
+                    0
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 14
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 3
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 4,
+                "coordinates": [
+                    6,
+                    0
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 3
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 4
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 5,
+                "coordinates": [
+                    1,
+                    1
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 7
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 5
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 6,
+                "coordinates": [
+                    3,
+                    1
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 5
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 6
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 7,
+                "coordinates": [
+                    5,
+                    1
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 8
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 7
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 8,
+                "coordinates": [
+                    7,
+                    1
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 15
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 8
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 9,
+                "coordinates": [
+                    0,
+                    2
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 12
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 9
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 10,
+                "coordinates": [
+                    2,
+                    2
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 10
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 10
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 11,
+                "coordinates": [
+                    4,
+                    2
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 16
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 11
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 12,
+                "coordinates": [
+                    6,
+                    2
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 9
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 12
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 13,
+                "coordinates": [
+                    1,
+                    3
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 2
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 13
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 14,
+                "coordinates": [
+                    3,
+                    3
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 1
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 14
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 15,
+                "coordinates": [
+                    5,
+                    3
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 11
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 15
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 16,
+                "coordinates": [
+                    7,
+                    3
+                ],
+                "wireless_delay": 0
+            },
+            "relationships": {
+                "users": [],
+                "edge_servers": [
+                    {
+                        "class": "EdgeServer",
+                        "id": 4
+                    }
+                ],
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 16
+                }
+            }
+        }
+    ],
+    "User": [],
+    "ContainerLayer": [],
+    "ContainerImage": [],
+    "Service": [],
+    "ContainerRegistry": [],
+    "Application": [],
+    "EdgeServer": [
+        {
+            "attributes": {
+                "id": 1,
+                "available": true,
+                "model_name": "PowerEdge R620",
+                "cpu": 16,
+                "memory": 24,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    3,
+                    3
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.2226337448559671,
+                    "max_power_consumption": 243
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 1
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 14
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 14
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 2,
+                "available": true,
+                "model_name": "PowerEdge R620",
+                "cpu": 16,
+                "memory": 24,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    1,
+                    3
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.2226337448559671,
+                    "max_power_consumption": 243
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 2
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 13
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 13
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 3,
+                "available": true,
+                "model_name": "PowerEdge R620",
+                "cpu": 16,
+                "memory": 24,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    6,
+                    0
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.2226337448559671,
+                    "max_power_consumption": 243
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 3
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 4
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 4
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 4,
+                "available": true,
+                "model_name": "PowerEdge R620",
+                "cpu": 16,
+                "memory": 24,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    7,
+                    3
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.2226337448559671,
+                    "max_power_consumption": 243
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 4
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 16
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 16
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 5,
+                "available": true,
+                "model_name": "PowerEdge R620",
+                "cpu": 16,
+                "memory": 24,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    3,
+                    1
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.2226337448559671,
+                    "max_power_consumption": 243
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 5
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 6
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 6
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 6,
+                "available": true,
+                "model_name": "PowerEdge R620",
+                "cpu": 16,
+                "memory": 24,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    2,
+                    0
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.2226337448559671,
+                    "max_power_consumption": 243
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 6
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 2
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 2
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 7,
+                "available": true,
+                "model_name": "PowerEdge R620",
+                "cpu": 16,
+                "memory": 24,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    1,
+                    1
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.2226337448559671,
+                    "max_power_consumption": 243
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 7
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 5
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 5
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 8,
+                "available": true,
+                "model_name": "PowerEdge R620",
+                "cpu": 16,
+                "memory": 24,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    5,
+                    1
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.2226337448559671,
+                    "max_power_consumption": 243
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 8
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 7
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 7
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 9,
+                "available": true,
+                "model_name": "SGI",
+                "cpu": 32,
+                "memory": 32,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    6,
+                    2
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.1910598413842826,
+                    "max_power_consumption": 1387
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 9
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 12
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 12
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 10,
+                "available": true,
+                "model_name": "SGI",
+                "cpu": 32,
+                "memory": 32,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    2,
+                    2
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.1910598413842826,
+                    "max_power_consumption": 1387
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 10
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 10
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 10
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 11,
+                "available": true,
+                "model_name": "SGI",
+                "cpu": 32,
+                "memory": 32,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    5,
+                    3
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.1910598413842826,
+                    "max_power_consumption": 1387
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 11
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 15
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 15
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 12,
+                "available": true,
+                "model_name": "SGI",
+                "cpu": 32,
+                "memory": 32,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    0,
+                    2
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.1910598413842826,
+                    "max_power_consumption": 1387
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 12
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 9
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 9
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 13,
+                "available": true,
+                "model_name": "SGI",
+                "cpu": 32,
+                "memory": 32,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    0,
+                    0
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.1910598413842826,
+                    "max_power_consumption": 1387
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 13
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 1
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 1
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 14,
+                "available": true,
+                "model_name": "SGI",
+                "cpu": 32,
+                "memory": 32,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    4,
+                    0
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.1910598413842826,
+                    "max_power_consumption": 1387
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 14
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 3
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 3
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 15,
+                "available": true,
+                "model_name": "SGI",
+                "cpu": 32,
+                "memory": 32,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    7,
+                    1
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.1910598413842826,
+                    "max_power_consumption": 1387
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 15
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 8
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 8
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        },
+        {
+            "attributes": {
+                "id": 16,
+                "available": true,
+                "model_name": "SGI",
+                "cpu": 32,
+                "memory": 32,
+                "disk": 131072,
+                "cpu_demand": 0,
+                "memory_demand": 0,
+                "disk_demand": 0,
+                "coordinates": [
+                    4,
+                    2
+                ],
+                "max_concurrent_layer_downloads": 3,
+                "active": true,
+                "power_model_parameters": {
+                    "static_power_percentage": 0.1910598413842826,
+                    "max_power_consumption": 1387
+                },
+                "time_to_boot": 3,
+                "status": "failing"
+            },
+            "relationships": {
+                "failure_model": {
+                    "class": "BaseFailureGroupModel",
+                    "id": 16
+                },
+                "power_model": "LinearServerPowerModel",
+                "base_station": {
+                    "class": "BaseStation",
+                    "id": 11
+                },
+                "network_switch": {
+                    "class": "NetworkSwitch",
+                    "id": 11
+                },
+                "services": [],
+                "container_layers": [],
+                "container_images": [],
+                "container_registries": []
+            }
+        }
+    ],
+    "RandomDurationAndIntervalAccessPattern": [],
+    "CircularDurationAndIntervalAccessPattern": [],
+    "BaseFailureGroupModel": [
+        {
+            "attributes": {
+                "id": 1,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 1
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 2,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 2
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 3,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 3
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 4,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 4
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 5,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 5
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 6,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 6
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 7,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 7
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 8,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 8
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 9,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 9
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 10,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 10
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 11,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 11
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 12,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 12
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 13,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 13
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 14,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 14
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 15,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 15
+                }
+            }
+        },
+        {
+            "attributes": {
+                "id": 16,
+                "initial_failure_time_step": 1,
+                "failure_history": [],
+                "failure_trace": [
+                    [
+                        {
+                            "failure_starts_at": 1,
+                            "failure_duration": 5,
+                            "failure_ends_at": 5,
+                            "starts_booting_at": 6,
+                            "finishes_booting_at": 8,
+                            "becomes_available_at": 9
+                        },
+                        {
+                            "failure_starts_at": 14,
+                            "failure_duration": 5,
+                            "failure_ends_at": 18,
+                            "starts_booting_at": 19,
+                            "finishes_booting_at": 21,
+                            "becomes_available_at": 22
+                        },
+                        {
+                            "failure_starts_at": 27,
+                            "failure_duration": 5,
+                            "failure_ends_at": 31,
+                            "starts_booting_at": 32,
+                            "finishes_booting_at": 34,
+                            "becomes_available_at": 35
+                        }
+                    ]
+                ],
+                "failure_characteristics": {
+                    "number_of_failures": {
+                        "lower_bound": 3,
+                        "upper_bound": 3
+                    },
+                    "failure_duration": {
+                        "lower_bound": 5,
+                        "upper_bound": 5
+                    },
+                    "interval_between_failures": {
+                        "lower_bound": 4,
+                        "upper_bound": 4
+                    },
+                    "interval_between_sets": {
+                        "lower_bound": 8,
+                        "upper_bound": 8
+                    }
+                }
+            },
+            "relationships": {
+                "device": {
+                    "class": "EdgeServer",
+                    "id": 16
+                }
+            }
+        }
+    ]
+}

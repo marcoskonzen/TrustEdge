@@ -1,43 +1,51 @@
 from edge_sim_py.components.container_registry import ContainerRegistry
 from edge_sim_py.components.network_flow import NetworkFlow
 import networkx as nx
+from random import randint
 
 
 def edge_server_step(self):
     """Method that executes the events involving the object at each time step."""
     # Failure management
+    current_step = self.model.schedule.steps + 1
     no_failure_has_ocurred = len(self.failure_model.failure_history) == 0
-    last_failure_that_ocurred_is_the_last_planned = self.failure_model.failure_history[-1] == self.failure_model.failure_trace[-1][-1]
-    if no_failure_has_ocurred or not no_failure_has_ocurred and last_failure_that_ocurred_is_the_last_planned:
-        interval_between_sets = self.failure_model.failure_characteristics["interval_between_sets"]
-        if no_failure_has_ocurred:
-            next_failure_time_step = self.model.schedule.steps + interval_between_sets
-        else:
-            next_failure_time_step = self.failure_model.failure_trace[-1][-1]["becomes_available_at"] + interval_between_sets
-        self.failure_model.failure_model.generate_failure_set(next_failure_time_step=next_failure_time_step)
+    if len(self.failure_model.failure_history) == 0:
+        last_failure_that_ocurred_is_the_last_planned = True
+    else:
+        last_failure_that_ocurred_is_the_last_planned = self.failure_model.failure_history[-1] == self.failure_model.failure_trace[-1][-1]
+
+    if no_failure_has_ocurred or last_failure_that_ocurred_is_the_last_planned:
+        interval_between_sets = randint(
+            a=self.failure_model.failure_characteristics["interval_between_sets"]["lower_bound"],
+            b=self.failure_model.failure_characteristics["interval_between_sets"]["upper_bound"],
+        )
+        next_failure_time_step = self.failure_model.failure_trace[-1][-1]["becomes_available_at"] + interval_between_sets
+        self.failure_model.generate_failure_set(next_failure_time_step=next_failure_time_step)
 
     # Filtering the failure history to get the ongoing failure (if any)
     flatten_failure_trace = [item for failure_group in self.failure_model.failure_trace for item in failure_group]
     ongoing_failure = next(
-        (failure for failure in flatten_failure_trace if failure["failure_starts_at"] <= self.model.schedule.steps <= failure["becomes_available_at"]), []
+        (failure for failure in flatten_failure_trace if failure["failure_starts_at"] <= current_step + 1 and current_step <= failure["becomes_available_at"]),
+        [],
     )
 
     # Updating the server status based on the ongoing failure status (if any)
     if len(ongoing_failure) > 0:
         # Checking whether the server status should be changed from "available" to "failing"
-        if self.model.schedule.steps == ongoing_failure["failure_starts_at"]:
+        if self.status == "available" and current_step + 1 == ongoing_failure["failure_starts_at"]:
             self.status = "failing"
             self.available = False
 
         # Checking whether the server status should be changed from "failing" to "booting"
-        if self.model.schedule.steps == ongoing_failure["starts_booting_at"]:
+        elif self.status == "failing" and current_step + 1 == ongoing_failure["starts_booting_at"]:
             self.status = "booting"
 
         # Checking whether the server status should be changed from "booting" to "available"
-        if self.model.schedule.steps == ongoing_failure["becomes_available_at"]:
+        elif self.status == "booting" and current_step + 1 == ongoing_failure["becomes_available_at"]:
             self.status = "available"
             self.available = True
-            self.failure_history.append(ongoing_failure)
+            if ongoing_failure not in self.failure_model.failure_history:
+                self.failure_model.failure_history.append(ongoing_failure)
 
     # Container provisioning management
     while len(self.waiting_queue) > 0 and len(self.download_queue) < self.max_concurrent_layer_downloads:

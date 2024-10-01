@@ -1,11 +1,26 @@
+# EdgeSimPy components
+from edge_sim_py.component_manager import ComponentManager
+
 # Importing Python modules
 from random import randint
+from copy import deepcopy
 from json import dumps
-from edge_sim_py.components.edge_server import EdgeServer
 
 
-class BaseFailureGroupModel:
+class BaseFailureGroupModel(ComponentManager):
+
+    # Class attributes that allow this class to use helper methods from the ComponentManager
+    _instances = []
+    _object_count = 0
+
     def __init__(self, device: object = None, initial_failure_time_step: int = 1, failure_characteristics: dict = {}):
+        # Adding the new object to the list of instances of its class
+        self.__class__._instances.append(self)
+
+        # Object's class instance ID
+        self.__class__._object_count += 1
+        self.id = self.__class__._object_count
+
         # Device to whom the failure group pattern is attached to
         self.device = device
         if device is not None:
@@ -16,10 +31,44 @@ class BaseFailureGroupModel:
         self.failure_trace = []  # The failure trace attribute comprises both failures that occurred and are planned to occur
 
         # Failure characteristics
+        self.initial_failure_time_step = initial_failure_time_step
         self.failure_characteristics = failure_characteristics
 
         # Creating the first failure based on the passed failure characteristics
-        self.generate_failure_set(next_failure_time_step=initial_failure_time_step)
+        if failure_characteristics != {}:
+            self.generate_failure_set(next_failure_time_step=initial_failure_time_step)
+
+    def _to_dict(self) -> dict:
+        """Method that overrides the way the object is formatted to JSON."
+
+        Returns:
+            dict: JSON-friendly representation of the object as a dictionary.
+        """
+        dictionary = {
+            "attributes": {
+                "id": self.id,
+                "initial_failure_time_step": self.initial_failure_time_step,
+                "failure_history": self.failure_history,
+                "failure_trace": self.failure_trace,
+                "failure_characteristics": deepcopy(self.failure_characteristics),
+            },
+            "relationships": {
+                "device": {"class": type(self.device).__name__, "id": self.device.id} if self.device else None,
+            },
+        }
+        return dictionary
+
+    def collect(self) -> dict:
+        """Method that collects a set of metrics for the object.
+
+        Returns:
+            metrics (dict): Object metrics.
+        """
+        return {}
+
+    def step(self):
+        """Method that executes the events involving the object at each time step."""
+        ...
 
     def generate_failure_set(self, next_failure_time_step: int):
         interval_between_sets_is_infinity = self.failure_characteristics["interval_between_sets"] == float("inf")
@@ -46,7 +95,7 @@ class BaseFailureGroupModel:
                 # The first failure starts at the initial failure time step
                 failure["failure_starts_at"] = next_failure_time_step
             else:
-                if failure_group[-1]["failure_ends_at"] == float("inf") or self.failure_characteristics["interval_between_failures"] == float("inf"):
+                if failure_group[-1]["becomes_available_at"] == float("inf") or self.failure_characteristics["interval_between_failures"] == float("inf"):
                     break
 
                 # The subsequent failure starts at a predefined interval after the previous failure
@@ -54,7 +103,7 @@ class BaseFailureGroupModel:
                     a=self.failure_characteristics["interval_between_failures"]["lower_bound"],
                     b=self.failure_characteristics["interval_between_failures"]["upper_bound"],
                 )
-                failure["failure_starts_at"] = failure_group[-1]["failure_ends_at"] + interval_from_last_failure + 1
+                failure["failure_starts_at"] = failure_group[-1]["becomes_available_at"] + interval_from_last_failure + 1
 
             # Defining the duration and the end time step of the failure
             if self.failure_characteristics["failure_duration"] == float("inf"):
@@ -75,29 +124,3 @@ class BaseFailureGroupModel:
 
         # Adding the created failure group to the failure history list
         self.failure_trace.append(failure_group)
-
-
-def main():
-    # Creating a sample edge server for testing purposes
-    sample_edge_server = EdgeServer()
-    sample_edge_server.time_to_boot = 2
-
-    # Create an instance of the BaseFailureGroupModel class
-    failure_group_model = BaseFailureGroupModel(
-        device=sample_edge_server,
-        initial_failure_time_step=1,
-        failure_characteristics={
-            "number_of_failures": {"lower_bound": 3, "upper_bound": 3},
-            "failure_duration": {"lower_bound": 5, "upper_bound": 5},
-            "interval_between_failures": {"lower_bound": 4, "upper_bound": 4},
-            "interval_between_sets": {"lower_bound": 8, "upper_bound": 8},
-        },
-    )
-
-    failure_group_model.generate_failure_set(next_failure_time_step=failure_group_model.failure_characteristics["interval_between_sets"])
-
-    print(dumps(failure_group_model.failure_trace, indent=4))
-
-
-if __name__ == "__main__":
-    main()

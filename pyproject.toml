@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "trustedge"
+name = "simulator"
 version = "0.1.0"
 description = "TrustEdge: Failure-Aware Serverless Function Orchestration on the Edge"
 authors = ["Marcos Konzen <marcoskonzen@gmail.com>"]
