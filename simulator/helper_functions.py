@@ -229,3 +229,80 @@ def get_delay(wireless_delay: int, origin_switch: object, target_switch: object)
     delay = wireless_delay + topology.calculate_path_delay(path=path)
 
     return delay
+
+
+def randomized_closest_fit():
+    """Encapsulates a randomized closest-fit service placement algorithm."""
+    services = sample(Service.all(), Service.count())
+    for service in services:
+        app = service.application
+        user = app.users[0]
+        user_switch = user.base_station.network_switch
+
+        edge_servers = []
+        for edge_server in EdgeServer.all():
+            path = nx.shortest_path(
+                G=Topology.first(),
+                source=user_switch,
+                target=edge_server.network_switch,
+                weight="delay",
+            )
+            delay = Topology.first().calculate_path_delay(path=path)
+            edge_servers.append(
+                {
+                    "object": edge_server,
+                    "path": path,
+                    "delay": delay,
+                    "violates_sla": delay > user.delay_slas[str(service.application.id)],
+                    "free_capacity": get_normalized_capacity(object=edge_server) - get_normalized_demand(object=edge_server),
+                }
+            )
+
+        edge_servers = sorted(edge_servers, key=lambda s: (s["violates_sla"], -s["free_capacity"]))
+
+        for edge_server_metadata in edge_servers:
+            edge_server = edge_server_metadata["object"]
+
+            # Checking if the host would have resources to host the service and its (additional) layers
+            if edge_server.has_capacity_to_host(service=service):
+                # Updating the host's resource usage
+                edge_server.cpu_demand += service.cpu_demand
+                edge_server.memory_demand += service.memory_demand
+
+                # Creating relationship between the host and the registry
+                service.server = edge_server
+                edge_server.services.append(service)
+
+                for layer_metadata in edge_server._get_uncached_layers(service=service):
+                    layer = ContainerLayer(
+                        digest=layer_metadata.digest,
+                        size=layer_metadata.size,
+                        instruction=layer_metadata.instruction,
+                    )
+
+                    # Updating host's resource usage based on the layer size
+                    edge_server.disk_demand += layer.size
+
+                    # Creating relationship between the host and the layer
+                    layer.server = edge_server
+                    edge_server.container_layers.append(layer)
+
+                break
+
+        # Creating an instance of the service image on its host if necessary
+        if not any(hosted_image for hosted_image in service.server.container_images if hosted_image.digest == service.image_digest):
+            template_image = next(
+                (img for img in ContainerImage.all() if img.digest == service.image_digest),
+                None,
+            )
+
+            # Creating a ContainerImage object to represent the new image
+            image = ContainerImage()
+            image.name = template_image.name
+            image.digest = template_image.digest
+            image.tag = template_image.tag
+            image.layers_digests = template_image.layers_digests
+
+            # Connecting the new image to the target host
+            image.server = service.server
+            service.server.container_images.append(image)
