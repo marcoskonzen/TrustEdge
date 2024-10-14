@@ -1,7 +1,7 @@
 """This file contains a set of helper functions that facilitate the simulation execution."""
 
 # Importing Python libraries
-from random import choice, shuffle
+from random import choice, shuffle, sample
 import matplotlib.pyplot as plt
 import networkx as nx
 
