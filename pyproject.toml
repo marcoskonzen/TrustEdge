@@ -11,6 +11,7 @@ edge-sim-py = {git = "https://github.com/EdgeSimPy/EdgeSimPy.git", rev = "v1.1.0
 matplotlib = "3.5.0"
 networkx = "2.6.2"
 numpy = "1.23.5"
+tabulate = "^0.9.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.8.0"
