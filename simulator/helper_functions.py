@@ -306,3 +306,143 @@ def randomized_closest_fit():
             # Connecting the new image to the target host
             image.server = service.server
             service.server.container_images.append(image)
+
+
+def show_scenario_overview():
+    print("\n\n")
+    print("======================")
+    print("==== EDGE SERVERS ====")
+    print("======================")
+    for edge_server in EdgeServer.all():
+        edge_server_metadata = {
+            "base_station": edge_server.base_station,
+            "capacity": [edge_server.cpu, edge_server.memory, edge_server.disk],
+            "demand": [edge_server.cpu_demand, edge_server.memory_demand, edge_server.disk_demand],
+            "services": [service.id for service in edge_server.services],
+            "layers": [layer.id for layer in edge_server.container_layers],
+            "images": [image.id for image in edge_server.container_images],
+        }
+        print(f"{edge_server}. {edge_server_metadata}")
+
+    print("\n\n")
+    print("======================")
+    print("==== APPLICATIONS ====")
+    print("======================")
+    print(f"Number of Applications/Services/Users: {Application.count()}/{Service.count()}/{User.count()}")
+    for application in Application.all():
+        user = application.users[0]
+        service = application.services[0]
+        image = ContainerImage.find_by(attribute_name="digest", attribute_value=service.image_digest)
+        application_metadata = {
+            "delay_sla": user.delay_slas[str(application.id)],
+            "delay": user.delays[str(application.id)],
+            "image": image.name,
+            "state": service.state,
+            "demand": [service.cpu_demand, service.memory_demand],
+            "host": service.server,
+        }
+        print(f"\t{application}. {application_metadata}")
+
+    print("\n\n")
+    print("==========================")
+    print("==== CONTAINER ASSETS ====")
+    print("==========================")
+    print(f"==== CONTAINER IMAGES ({ContainerImage.count()}):")
+    for container_image in ContainerImage.all():
+        print(f"\t{container_image}. Server: {container_image.server}")
+
+    print("")
+
+    print(f"==== CONTAINER LAYERS ({ContainerLayer.count()}):")
+    for container_layer in ContainerLayer.all():
+        print(f"\t{container_layer}. Server: {container_layer.server}")
+    ##########################
+    #### DATASET ANALYSIS ####
+    ##########################
+    # Calculating the network delay between users and edge servers (useful for defining reasonable delay SLAs)
+    users = []
+    for user in User.all():
+        user_metadata = {
+            "object": user,
+            "sla": user.delay_slas[str(user.applications[0].id)],
+            "all_delays": [],
+            "hosts_that_meet_the_sla": [],
+        }
+        edge_servers = []
+        for edge_server in EdgeServer.all():
+            path = nx.shortest_path(G=Topology.first(), source=user.base_station.network_switch, target=edge_server.network_switch, weight="delay")
+            path_delay = Topology.first().calculate_path_delay(path=path)
+            user_metadata["all_delays"].append(path_delay)
+            if user_metadata["sla"] >= path_delay:
+                user_metadata["hosts_that_meet_the_sla"].append(edge_server)
+
+        user_metadata["min_delay"] = min(user_metadata["all_delays"])
+        user_metadata["max_delay"] = max(user_metadata["all_delays"])
+        user_metadata["avg_delay"] = sum(user_metadata["all_delays"]) / len(user_metadata["all_delays"])
+        user_metadata["delays"] = {}
+        for delay in sorted(list(set(user_metadata["all_delays"]))):
+            user_metadata["delays"][delay] = user_metadata["all_delays"].count(delay)
+
+        users.append(user_metadata)
+
+    print("\n\n")
+    print("=================================================================")
+    print("==== NETWORK DISTANCE (DELAY) BETWEEN USERS AND EDGE SERVERS ====")
+    print("=================================================================")
+    users = sorted(users, key=lambda user_metadata: (user_metadata["sla"], len(user_metadata["hosts_that_meet_the_sla"])))
+    for index, user_metadata in enumerate(users, 1):
+        user_attrs = {
+            "object": user_metadata["object"],
+            "sla": user_metadata["object"].delay_slas[str(user_metadata["object"].applications[0].id)],
+            "hosts_that_meet_the_sla": len(user_metadata["hosts_that_meet_the_sla"]),
+            "min": user_metadata["min_delay"],
+            "max": user_metadata["max_delay"],
+            "avg": round(user_metadata["avg_delay"]),
+            "delays": user_metadata["delays"],
+        }
+        print(f"[{index}] {user_attrs}")
+        if user_attrs["min"] > user_attrs["sla"]:
+            print(f"\n\n\n\nWARNING: {user_attrs['object']} delay SLA is not achievable!\n\n\n\n")
+        if user_attrs["max"] <= user_attrs["sla"]:
+            print(f"\n\n\n\nWARNING: {user_attrs['object']} delay SLA is achievable by any edge server!\n\n\n\n")
+
+    # Calculating the infrastructure occupation and information about the services
+    edge_server_cpu_capacity = 0
+    edge_server_memory_capacity = 0
+    service_cpu_demand = 0
+    service_memory_demand = 0
+
+    for edge_server in EdgeServer.all():
+        if len(edge_server.container_registries) == 0:
+            edge_server_cpu_capacity += edge_server.cpu
+            edge_server_memory_capacity += edge_server.memory
+
+    for service in Service.all():
+        service_cpu_demand += service.cpu_demand
+        service_memory_demand += service.memory_demand
+
+    overall_cpu_occupation = round((service_cpu_demand / edge_server_cpu_capacity) * 100, 1)
+    overall_memory_occupation = round((service_memory_demand / edge_server_memory_capacity) * 100, 1)
+
+    print("\n\n")
+    print("============================================")
+    print("============================================")
+    print("==== INFRASTRUCTURE OCCUPATION OVERVIEW ====")
+    print("============================================")
+    print("============================================")
+    print(f"Edge Servers: {EdgeServer.count()}")
+    print(f"\tCPU Capacity: {edge_server_cpu_capacity}")
+    print(f"\tRAM Capacity: {edge_server_memory_capacity}")
+
+    print("")
+
+    print(f"Idle Edge Servers: {sum([1 for s in EdgeServer.all() if s.cpu_demand == 0])}")
+
+    print("")
+
+    print(f"Services: {Service.count()}")
+    print(f"\tCPU Demand: {service_cpu_demand}")
+
+    print(f"\nOverall Occupation")
+    print(f"\tCPU: {overall_cpu_occupation}%")
+    print(f"\tRAM: {overall_memory_occupation}%")

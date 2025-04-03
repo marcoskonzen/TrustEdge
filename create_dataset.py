@@ -7,8 +7,8 @@ from edge_sim_py import *
 from simulator.extensions.base_failure_model import BaseFailureGroupModel
 from simulator.helper_functions import *
 
-# Importing Python libraries
-from random import seed, sample
+# Importing Python modules
+from random import seed, sample, randint
 import matplotlib.pyplot as plt
 import networkx as nx
 import json
@@ -99,6 +99,7 @@ def edge_server_to_dict(self) -> dict:
     }
     return dictionary
 
+
 def user_to_dict(self) -> dict:
     access_patterns = {}
     for app_id, access_pattern in self.access_patterns.items():
@@ -124,6 +125,7 @@ def user_to_dict(self) -> dict:
         },
     }
     return dictionary
+
 
 # Defining a seed value to enable reproducibility
 seed(0)
@@ -168,10 +170,10 @@ edge_server_specifications = [
         # Failure-related parameters:
         "time_to_boot": 3,
         "initial_failure_time_step": 1,
-        "number_of_failures": {"lower_bound": 3, "upper_bound": 3},
+        "number_of_failures": {"lower_bound": 2, "upper_bound": 2},
         "failure_duration": {"lower_bound": 5, "upper_bound": 5},
-        "interval_between_failures": {"lower_bound": 4, "upper_bound": 4},
-        "interval_between_sets": {"lower_bound": 8, "upper_bound": 8},
+        "interval_between_failures": {"lower_bound": 1, "upper_bound": 1},
+        "interval_between_sets": {"lower_bound": 100, "upper_bound": 100},
     },
     {
         "number_of_objects": SERVERS_PER_SPEC,
@@ -183,11 +185,11 @@ edge_server_specifications = [
         "max_power_consumption": 1387,
         # Failure-related parameters:
         "time_to_boot": 3,
-        "initial_failure_time_step": 1,
-        "number_of_failures": {"lower_bound": 3, "upper_bound": 3},
+        "initial_failure_time_step": 100,
+        "number_of_failures": {"lower_bound": 2, "upper_bound": 2},
         "failure_duration": {"lower_bound": 5, "upper_bound": 5},
-        "interval_between_failures": {"lower_bound": 4, "upper_bound": 4},
-        "interval_between_sets": {"lower_bound": 8, "upper_bound": 8},
+        "interval_between_failures": {"lower_bound": 1, "upper_bound": 1},
+        "interval_between_sets": {"lower_bound": 100, "upper_bound": 100},
     },
 ]
 
@@ -221,17 +223,20 @@ for spec in edge_server_specifications:
         else:
             server.status = "failing"
 
+        # Defining the failure history
+        initial_failure_time_step = -1200
         BaseFailureGroupModel(
             device=server,
-            initial_failure_time_step=spec["initial_failure_time_step"],
+            initial_failure_time_step=initial_failure_time_step,
             failure_characteristics={
                 "number_of_failures": spec["number_of_failures"],
                 "failure_duration": spec["failure_duration"],
                 "interval_between_failures": spec["interval_between_failures"],
                 "interval_between_sets": spec["interval_between_sets"],
             },
+            number_of_failure_groups_to_create=10,
         )
-        print(f"{server}. Failure Model: {server.failure_model}")
+        server.failure_model.failure_history = [failure for failure_group in server.failure_model.failure_trace for failure in failure_group]
 
 display_topology(topology=Topology.first())
 
@@ -438,6 +443,8 @@ for user in User.all():
 ###############################################
 #### WRAPPING UP AND EXPORTING THE DATASET ####
 ###############################################
+# Displaying the scenario's base information
+show_scenario_overview()
 
 # Instructing EdgeSimPy to serialize objects with the new attributes
 EdgeServer._to_dict = edge_server_to_dict

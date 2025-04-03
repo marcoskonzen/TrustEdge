@@ -21,10 +21,6 @@ def load_edgesimpy_extensions():
     # Loading the entity extensions
     EdgeServer.step = edge_server_step
 
-    # Creating the first failure occurrences
-    # for failure_model_instance in BaseFailureGroupModel.all():
-    # failure_model_instance.generate_failure_set(next_failure_time_step=failure_model_instance.initial_failure_time_step)
-
 
 def main(parameters: dict):
     # Defining a seed value to enable reproducible results

@@ -13,7 +13,13 @@ class BaseFailureGroupModel(ComponentManager):
     _instances = []
     _object_count = 0
 
-    def __init__(self, device: object = None, initial_failure_time_step: int = 1, failure_characteristics: dict = {}):
+    def __init__(
+        self,
+        device: object = None,
+        initial_failure_time_step: int = 1,
+        failure_characteristics: dict = {},
+        number_of_failure_groups_to_create: int = 1,
+    ):
         # Adding the new object to the list of instances of its class
         self.__class__._instances.append(self)
 
@@ -36,7 +42,21 @@ class BaseFailureGroupModel(ComponentManager):
 
         # Creating the first failure based on the passed failure characteristics
         if failure_characteristics != {}:
-            self.generate_failure_set(next_failure_time_step=initial_failure_time_step)
+            for count in range(number_of_failure_groups_to_create):
+                interval_between_sets = randint(
+                    a=self.failure_characteristics["interval_between_sets"]["lower_bound"],
+                    b=self.failure_characteristics["interval_between_sets"]["upper_bound"],
+                )
+
+                if count == 0:
+                    next_failure_time_step = initial_failure_time_step
+                else:
+                    if len(self.failure_trace) == 0:
+                        next_failure_time_step = interval_between_sets
+                    else:
+                        next_failure_time_step = self.failure_trace[-1][-1]["becomes_available_at"] + interval_between_sets
+
+                self.generate_failure_set(next_failure_time_step=next_failure_time_step)
 
     def _to_dict(self) -> dict:
         """Method that overrides the way the object is formatted to JSON."
@@ -71,56 +91,57 @@ class BaseFailureGroupModel(ComponentManager):
         ...
 
     def generate_failure_set(self, next_failure_time_step: int):
-        interval_between_sets_is_infinity = self.failure_characteristics["interval_between_sets"] == float("inf")
-        last_failure_lasts_forever = len(self.failure_trace) > 0 and self.failure_trace[-1][-1]["failure_duration"] == float("inf")
+        if next_failure_time_step != float("inf"):
+            interval_between_sets_is_infinity = self.failure_characteristics["interval_between_sets"] == float("inf")
+            last_failure_lasts_forever = len(self.failure_trace) > 0 and self.failure_trace[-1][-1]["failure_duration"] == float("inf")
 
-        if len(self.failure_trace) > 0 and (interval_between_sets_is_infinity or last_failure_lasts_forever):
-            return
+            if len(self.failure_trace) > 0 and (interval_between_sets_is_infinity or last_failure_lasts_forever):
+                return
 
-        # Defining the number of failures that will compose the failure group
-        number_of_failures_within_set = randint(
-            a=self.failure_characteristics["number_of_failures"]["lower_bound"],
-            b=self.failure_characteristics["number_of_failures"]["upper_bound"],
-        )
+            # Defining the number of failures that will compose the failure group
+            number_of_failures_within_set = randint(
+                a=self.failure_characteristics["number_of_failures"]["lower_bound"],
+                b=self.failure_characteristics["number_of_failures"]["upper_bound"],
+            )
 
-        # Creating the failure group
-        failure_group = []
+            # Creating the failure group
+            failure_group = []
 
-        # Creating failures that will compose the failure group
-        for failure_count in range(number_of_failures_within_set):
-            # Accommodating the failure metadata within an independent dictionary
-            failure = {}
+            # Creating failures that will compose the failure group
+            for failure_count in range(number_of_failures_within_set):
+                # Accommodating the failure metadata within an independent dictionary
+                failure = {}
 
-            if failure_count == 0:
-                # The first failure starts at the initial failure time step
-                failure["failure_starts_at"] = next_failure_time_step
-            else:
-                if failure_group[-1]["becomes_available_at"] == float("inf") or self.failure_characteristics["interval_between_failures"] == float("inf"):
-                    break
+                if failure_count == 0:
+                    # The first failure starts at the initial failure time step
+                    failure["failure_starts_at"] = next_failure_time_step
+                else:
+                    if failure_group[-1]["becomes_available_at"] == float("inf") or self.failure_characteristics["interval_between_failures"] == float("inf"):
+                        break
 
-                # The subsequent failure starts at a predefined interval after the previous failure
-                interval_from_last_failure = randint(
-                    a=self.failure_characteristics["interval_between_failures"]["lower_bound"],
-                    b=self.failure_characteristics["interval_between_failures"]["upper_bound"],
-                )
-                failure["failure_starts_at"] = failure_group[-1]["becomes_available_at"] + interval_from_last_failure + 1
+                    # The subsequent failure starts at a predefined interval after the previous failure
+                    interval_from_last_failure = randint(
+                        a=self.failure_characteristics["interval_between_failures"]["lower_bound"],
+                        b=self.failure_characteristics["interval_between_failures"]["upper_bound"],
+                    )
+                    failure["failure_starts_at"] = failure_group[-1]["becomes_available_at"] + interval_from_last_failure + 1
 
-            # Defining the duration and the end time step of the failure
-            if self.failure_characteristics["failure_duration"] == float("inf"):
-                failure["failure_duration"] = float("inf")
-                failure["failure_ends_at"] = float("inf")
-            else:
-                failure["failure_duration"] = randint(
-                    a=self.failure_characteristics["failure_duration"]["lower_bound"],
-                    b=self.failure_characteristics["failure_duration"]["upper_bound"],
-                )
-                failure["failure_ends_at"] = failure["failure_starts_at"] + failure["failure_duration"] - 1
-                failure["starts_booting_at"] = failure["failure_ends_at"] + 1
-                failure["finishes_booting_at"] = failure["starts_booting_at"] + self.device.time_to_boot - 1
-                failure["becomes_available_at"] = failure["finishes_booting_at"] + 1
+                # Defining the duration and the end time step of the failure
+                if self.failure_characteristics["failure_duration"] == float("inf"):
+                    failure["failure_duration"] = float("inf")
+                    failure["failure_ends_at"] = float("inf")
+                else:
+                    failure["failure_duration"] = randint(
+                        a=self.failure_characteristics["failure_duration"]["lower_bound"],
+                        b=self.failure_characteristics["failure_duration"]["upper_bound"],
+                    )
+                    failure["failure_ends_at"] = failure["failure_starts_at"] + failure["failure_duration"] - 1
+                    failure["starts_booting_at"] = failure["failure_ends_at"] + 1
+                    failure["finishes_booting_at"] = failure["starts_booting_at"] + self.device.time_to_boot - 1
+                    failure["becomes_available_at"] = failure["finishes_booting_at"] + 1
 
-            # Storing the failure metadata within the failure group list
-            failure_group.append(failure)
+                # Storing the failure metadata within the failure group list
+                failure_group.append(failure)
 
-        # Adding the created failure group to the failure history list
-        self.failure_trace.append(failure_group)
+            # Adding the created failure group to the failure history list
+            self.failure_trace.append(failure_group)
