@@ -8,7 +8,7 @@ from simulator.extensions.base_failure_model import BaseFailureGroupModel
 from simulator.helper_functions import *
 
 # Importing Python modules
-from random import seed, sample, randint
+from random import seed, sample
 import matplotlib.pyplot as plt
 import networkx as nx
 import json
@@ -172,8 +172,8 @@ edge_server_specifications = [
         "initial_failure_time_step": 1,
         "number_of_failures": {"lower_bound": 2, "upper_bound": 2},
         "failure_duration": {"lower_bound": 5, "upper_bound": 5},
-        "interval_between_failures": {"lower_bound": 1, "upper_bound": 1},
-        "interval_between_sets": {"lower_bound": 100, "upper_bound": 100},
+        "interval_between_failures": {"lower_bound": 50, "upper_bound": 50},
+        "interval_between_sets": {"lower_bound": 60, "upper_bound": 60},
     },
     {
         "number_of_objects": SERVERS_PER_SPEC,
@@ -188,8 +188,8 @@ edge_server_specifications = [
         "initial_failure_time_step": 100,
         "number_of_failures": {"lower_bound": 2, "upper_bound": 2},
         "failure_duration": {"lower_bound": 5, "upper_bound": 5},
-        "interval_between_failures": {"lower_bound": 1, "upper_bound": 1},
-        "interval_between_sets": {"lower_bound": 100, "upper_bound": 100},
+        "interval_between_failures": {"lower_bound": 50, "upper_bound": 50},
+        "interval_between_sets": {"lower_bound": 60, "upper_bound": 60},
     },
 ]
 

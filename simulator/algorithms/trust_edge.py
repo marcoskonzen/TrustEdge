@@ -32,28 +32,26 @@ def failure_rate(history):
 
 
 def conditional_reliability(history, upcoming_instants):
-    """
-    Calcula a Confiabilidade Condicional R(T+t,t).
-    Como a taxa de falhas (lambda) é constante, utiliza-se a distribuição exponencial.
-    R(t) = euler ** (-lambda * t)
-    R(T+t,t) = R(T+t) / R(t)
-    """
     return 2.71828 ** (-failure_rate(history) * (len(history) + upcoming_instants)) / 2.71828 ** (-failure_rate(history) * len(history))
 
 
 def trust_edge(parameters: dict = {}):
-    print(f"==== TIME STEP {parameters['current_step']}")
 
     server = EdgeServer.first()
-    print(dumps(server.failure_model.failure_history, indent=4))
-    print("\n\n\n======================\n\n\n")
 
+    print(f"==== TIME STEP {parameters['current_step']}")
     server_metadata = {
-        "object": server,
+        "object": str(server),
+        "status": server.status,
+        "available": server.available,
         "total_failures": total_failures(server.failure_model.failure_history),
         "mttr": mttr(server.failure_model.failure_history),
         "mtbf": mtbf(server.failure_model.failure_history),
         "failure_rate": failure_rate(server.failure_model.failure_history),
         "conditional_reliability": conditional_reliability(server.failure_model.failure_history, 20),
+        "failure_history['failure_starts_at']": server.failure_model.failure_history[-1]["failure_starts_at"],
+        "failure_history['becomes_available_at']": server.failure_model.failure_history[-1]["becomes_available_at"],
+        "failure_trace": [server.failure_model.failure_trace[-1][0], server.failure_model.failure_trace[-1][1]],
     }
-    print(f"{server_metadata}")
+    print(f"{dumps(server_metadata, indent=4)}")
+    print("\n======================\n\n\n")

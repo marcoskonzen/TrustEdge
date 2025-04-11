@@ -126,6 +126,12 @@ class BaseFailureGroupModel(ComponentManager):
                     )
                     failure["failure_starts_at"] = failure_group[-1]["becomes_available_at"] + interval_from_last_failure + 1
 
+                if self.device.model is not None:
+                    # Enforcing the failure start time step to be greater than the current time step to
+                    # avoid issues considering the failure history prior the simulation beginning
+                    if failure["failure_starts_at"] < self.device.model.schedule.steps + 1:
+                        failure["failure_starts_at"] = self.device.model.schedule.steps + 2
+
                 # Defining the duration and the end time step of the failure
                 if self.failure_characteristics["failure_duration"] == float("inf"):
                     failure["failure_duration"] = float("inf")

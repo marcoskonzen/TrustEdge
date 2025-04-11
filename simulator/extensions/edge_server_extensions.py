@@ -25,12 +25,23 @@ def edge_server_step(self):
         else:
             last_failure_that_occurred_is_the_last_planned = self.failure_model.failure_history[-1] == self.failure_model.failure_trace[-1][-1]
 
+        metadata = {
+            "obj": self,
+            "last_failure_that_occurred": self.failure_model.failure_trace[-1][-1],
+            "failure_characteristics": self.failure_model.failure_characteristics,
+            "no_failure_has_occurred": no_failure_has_occurred,
+            "last_failure_that_occurred_is_the_last_planned": last_failure_that_occurred_is_the_last_planned,
+        }
+        # print(f"\n\n\n[STEP {self.model.schedule.steps}] {metadata}")
+
         if no_failure_has_occurred or last_failure_that_occurred_is_the_last_planned:
             interval_between_sets = randint(
                 a=self.failure_model.failure_characteristics["interval_between_sets"]["lower_bound"],
                 b=self.failure_model.failure_characteristics["interval_between_sets"]["upper_bound"],
             )
             next_failure_time_step = self.failure_model.failure_trace[-1][-1]["becomes_available_at"] + interval_between_sets
+
+            # print(f"[STEP {self.model.schedule.steps}] Generating failure set for {self} with next_failure_time_step: {next_failure_time_step}")
             self.failure_model.generate_failure_set(next_failure_time_step=next_failure_time_step)
 
         # Filtering the failure history to get the ongoing failure (if any)
