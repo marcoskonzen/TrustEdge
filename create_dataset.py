@@ -168,12 +168,12 @@ edge_server_specifications = [
         "static_power_percentage": 54.1 / 243,
         "max_power_consumption": 243,
         # Failure-related parameters:
-        "time_to_boot": 3,
+        "time_to_boot": 10,
         "initial_failure_time_step": 1,
         "number_of_failures": {"lower_bound": 2, "upper_bound": 2},
-        "failure_duration": {"lower_bound": 5, "upper_bound": 5},
-        "interval_between_failures": {"lower_bound": 50, "upper_bound": 50},
-        "interval_between_sets": {"lower_bound": 60, "upper_bound": 60},
+        "failure_duration": {"lower_bound": 100, "upper_bound": 100},
+        "interval_between_failures": {"lower_bound": 10, "upper_bound": 10},
+        "interval_between_sets": {"lower_bound": 10, "upper_bound": 10},
     },
     {
         "number_of_objects": SERVERS_PER_SPEC,
@@ -184,12 +184,12 @@ edge_server_specifications = [
         "static_power_percentage": 265 / 1387,
         "max_power_consumption": 1387,
         # Failure-related parameters:
-        "time_to_boot": 3,
-        "initial_failure_time_step": 100,
+        "time_to_boot": 10,
+        "initial_failure_time_step": 1,
         "number_of_failures": {"lower_bound": 2, "upper_bound": 2},
-        "failure_duration": {"lower_bound": 5, "upper_bound": 5},
-        "interval_between_failures": {"lower_bound": 50, "upper_bound": 50},
-        "interval_between_sets": {"lower_bound": 60, "upper_bound": 60},
+        "failure_duration": {"lower_bound": 10, "upper_bound": 10},
+        "interval_between_failures": {"lower_bound": 100, "upper_bound": 100},
+        "interval_between_sets": {"lower_bound": 100, "upper_bound": 100},
     },
 ]
 
@@ -224,7 +224,7 @@ for spec in edge_server_specifications:
             server.status = "failing"
 
         # Defining the failure history
-        initial_failure_time_step = -1200
+        initial_failure_time_step = -2550
         BaseFailureGroupModel(
             device=server,
             initial_failure_time_step=initial_failure_time_step,
@@ -236,7 +236,11 @@ for spec in edge_server_specifications:
             },
             number_of_failure_groups_to_create=10,
         )
-        server.failure_model.failure_history = [failure for failure_group in server.failure_model.failure_trace for failure in failure_group]
+        server.failure_model.failure_history = []
+        for failure_group in server.failure_model.failure_trace:
+            for failure in failure_group:
+                if failure["becomes_available_at"] < 0:
+                    server.failure_model.failure_history.append(failure)
 
 display_topology(topology=Topology.first())
 
@@ -252,11 +256,11 @@ container_registry_image = {
     "layers": [
         {
             "digest": "sha256:31e352",
-            "size": 3.2404699325561523,
+            "size": round(3.2404699325561523, 2),
         },
         {
             "digest": "sha256:3c98a1",
-            "size": 5.634401321411133,
+            "size": round(5.634401321411133, 2),
         },
     ],
 }
@@ -346,14 +350,14 @@ TOTAL_USERS_APPS_SERVICES = len(service_image_specifications) * SERVICES_PER_SPE
 
 access_pattern_specifications = [
     {
-        "class": RandomDurationAndIntervalAccessPattern,
-        "duration_values": [15, 15],  # How long the user will access the application at each call (Short-lived applications)
-        "interval_values": [60, 60],  # Interval (in time steps) between the user accesses
+        "class": CircularDurationAndIntervalAccessPattern,
+        "duration_values": [10, 10],  # How long the user will access the application at each call (Short-lived applications)
+        "interval_values": [40, 40],  # Interval (in time steps) between the user accesses
     },
     {
-        "class": RandomDurationAndIntervalAccessPattern,
+        "class": CircularDurationAndIntervalAccessPattern,
         "duration_values": [60, 60],  # How long the user will access the application at each call (Long-lived applications)
-        "interval_values": [60, 60],  # Interval (in time steps) between the user accesses
+        "interval_values": [120, 120],  # Interval (in time steps) between the user accesses
     },
 ]
 service_demands = [

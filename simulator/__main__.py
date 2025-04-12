@@ -20,6 +20,10 @@ def load_edgesimpy_extensions():
     """Loads EdgeSimPy extensions"""
     # Loading the entity extensions
     EdgeServer.step = edge_server_step
+    EdgeServer.failure_history = failure_history
+
+    Application.step = application_step
+    Application.availability_status = availability_status
 
 
 def main(parameters: dict):
@@ -60,6 +64,8 @@ def main(parameters: dict):
 
     # Finishing the simulation's execution time counter
     final_time = time.time()
+
+    display_simulation_metrics(simulation_parameters=parameters, simulation_execution_time=final_time - start_time)
 
 
 if __name__ == "__main__":

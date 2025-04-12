@@ -73,8 +73,12 @@ def edge_server_step(self):
                 if ongoing_failure not in self.failure_model.failure_history:
                     self.failure_model.failure_history.append(ongoing_failure)
 
+        if self.status == "available":
+            for service in self.services:
+                service._available = True
+
         # Interrupting any ongoing service provisioning processes attached to the server if it is not available
-        if self.status != "available":
+        else:
             # Emptying the server's waiting queue
             self.waiting_queue = []
 
@@ -84,6 +88,9 @@ def edge_server_step(self):
                 flow.status = "interrupted"
 
             for service in Service.all():
+                if service.server == self:
+                    service._available = False
+
                 service_has_migrations = len(service._Service__migrations) > 0
                 if service_has_migrations:
                     migration = service._Service__migrations[-1]
@@ -145,3 +152,12 @@ def edge_server_step(self):
 
         # Adding the created flow to the edge server's download queue
         self.download_queue.append(flow)
+
+
+@property
+def failure_history(self):
+    return [
+        failure_occurrence
+        for failure_occurrence in self.failure_model.failure_history
+        if failure_occurrence["becomes_available_at"] < self.model.schedule.steps + 1
+    ]
