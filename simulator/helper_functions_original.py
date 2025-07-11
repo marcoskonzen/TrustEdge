@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from json import dumps
 from random import sample, randint
-import math  # Adicionado para cálculos matemáticos mais precisos
 
 # Importing EdgeSimPy components
 from edge_sim_py import *
@@ -449,3 +448,110 @@ def show_scenario_overview():
     print(f"\nOverall Occupation")
     print(f"\tCPU: {overall_cpu_occupation}%")
     print(f"\tRAM: {overall_memory_occupation}%")
+
+
+def get_server_total_failures(server):
+    history = server.failure_model.failure_history
+    return len(history)
+
+
+def get_server_mttr(server):
+    history = server.failure_model.failure_history
+    repair_times = []
+    for failure_occurrence in history:
+        repair_times.append(failure_occurrence["becomes_available_at"] - failure_occurrence["failure_starts_at"])
+
+    return sum(repair_times) / len(repair_times) if repair_times else 0
+
+
+def get_server_mtbf(server):
+    number_of_failures = len(server.failure_model.failure_history)
+
+    return get_server_uptime(server) / number_of_failures if number_of_failures > 0 else 0
+
+
+def get_server_failure_rate(server):
+    return 1 / get_server_mtbf(server) if get_server_mtbf(server) != 0 else float("inf")
+
+
+def get_server_conditional_reliability(server, upcoming_instants):
+    history = server.failure_model.failure_history
+    server_failure_rate = get_server_failure_rate(server)
+    return 2.71828 ** (-server_failure_rate * (len(history) + upcoming_instants)) / 2.71828 ** (-server_failure_rate * len(history))
+
+
+def get_server_downtime(server):
+    final_time_step = server.model.schedule.steps + 1
+    total_downtime = 0
+    for failure_occurrence in server.failure_model.failure_history:
+        if failure_occurrence["failure_starts_at"] < final_time_step:
+            total_downtime += failure_occurrence["becomes_available_at"] - failure_occurrence["failure_starts_at"]
+
+    return total_downtime
+
+
+def get_server_uptime(server):
+    initial_time_step = server.failure_model.failure_history[0]["failure_starts_at"]
+    final_time_step = server.model.schedule.steps + 1
+
+    total_time_span = final_time_step - initial_time_step
+    total_downtime = get_server_downtime(server=server)
+    total_uptime = total_time_span - total_downtime
+
+    return total_uptime
+
+
+def get_application_downtime(application):
+    downtime_count = 0
+    for availability_status in application.availability_history:
+        if availability_status is False:
+            downtime_count += 1
+
+    return downtime_count
+
+
+def get_application_uptime(application):
+    uptime_count = 0
+    for availability_status in application.availability_history:
+        if availability_status is True:
+            uptime_count += 1
+
+    return uptime_count
+
+
+def display_simulation_metrics(simulation_parameters: dict, simulation_execution_time: float):
+    application_raw_metrics = [
+        {"name": "Uptime", "values": [get_application_uptime(application) for application in Application.all()]},
+        {"name": "Downtime", "values": [get_application_downtime(application) for application in Application.all()]},
+    ]
+    application_metrics = {
+        metric["name"]: {
+            "min": min(metric["values"]),
+            "max": max(metric["values"]),
+            "avg": round(sum(metric["values"]) / len(metric["values"]), 2),
+        }
+        for metric in application_raw_metrics
+    }
+
+    # TODO: User perceived downtime is more complicated to calculate because each observation is a list of values, unlike the application metrics
+    # user_raw_metrics = [
+    #     {"name": "Perceived Downtime", "values": [user.user_perceived_downtime_history[str(user.applications[0].id)] for user in User.all()]},
+    # ]
+    # user_metrics = {
+    #     metric["name"]: {
+    #         "min": min(metric["values"]),
+    #         "max": max(metric["values"]),
+    #         "avg": round(sum(metric["values"]) / len(metric["values"]), 2),
+    #     }
+    #     for metric in user_raw_metrics
+    # }
+
+    metrics = {
+        "Simulation Parameters": simulation_parameters,
+        "Execution Time (seconds)": round(simulation_execution_time, 2),
+        "Number of Applications/Services/Users": f"{Application.count()}/{Service.count()}/{User.count()}",
+        "Number of Edge Servers": EdgeServer.count(),
+        "Application Metrics": application_metrics,
+    }
+
+    print(dumps(metrics, indent=4))

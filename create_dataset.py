@@ -170,10 +170,10 @@ edge_server_specifications = [
         # Failure-related parameters:
         "time_to_boot": 10,
         "initial_failure_time_step": 1,
-        "number_of_failures": {"lower_bound": 2, "upper_bound": 2},
-        "failure_duration": {"lower_bound": 100, "upper_bound": 100},
-        "interval_between_failures": {"lower_bound": 10, "upper_bound": 10},
-        "interval_between_sets": {"lower_bound": 10, "upper_bound": 10},
+        "number_of_failures": {"lower_bound": 1, "upper_bound": 2},
+        "failure_duration": {"lower_bound": 50, "upper_bound": 100},
+        "interval_between_failures": {"lower_bound": 10, "upper_bound": 30},
+        "interval_between_sets": {"lower_bound": 10, "upper_bound": 30},
     },
     {
         "number_of_objects": SERVERS_PER_SPEC,
@@ -186,10 +186,10 @@ edge_server_specifications = [
         # Failure-related parameters:
         "time_to_boot": 10,
         "initial_failure_time_step": 1,
-        "number_of_failures": {"lower_bound": 2, "upper_bound": 2},
-        "failure_duration": {"lower_bound": 10, "upper_bound": 10},
-        "interval_between_failures": {"lower_bound": 100, "upper_bound": 100},
-        "interval_between_sets": {"lower_bound": 100, "upper_bound": 100},
+        "number_of_failures": {"lower_bound": 2, "upper_bound": 4},
+        "failure_duration": {"lower_bound": 10, "upper_bound": 50},
+        "interval_between_failures": {"lower_bound": 100, "upper_bound": 200},
+        "interval_between_sets": {"lower_bound": 100, "upper_bound": 200},
     },
 ]
 
@@ -234,7 +234,7 @@ for spec in edge_server_specifications:
                 "interval_between_failures": spec["interval_between_failures"],
                 "interval_between_sets": spec["interval_between_sets"],
             },
-            number_of_failure_groups_to_create=10,
+            number_of_failure_groups_to_create=20,
         )
         server.failure_model.failure_history = []
         for failure_group in server.failure_model.failure_trace:
@@ -455,7 +455,7 @@ EdgeServer._to_dict = edge_server_to_dict
 User._to_dict = user_to_dict
 
 # Exporting scenario
-ComponentManager.export_scenario(save_to_file=True, file_name="dataset1")
+ComponentManager.export_scenario(save_to_file=True, file_name="dataset")
 
 # Exporting the topology representation to an image file
 display_topology(topology=Topology.first())

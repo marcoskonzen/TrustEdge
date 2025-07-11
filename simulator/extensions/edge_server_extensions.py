@@ -15,9 +15,7 @@ def edge_server_step(self):
     # Failure management
     current_step = self.model.schedule.steps + 1
     no_failure_has_occurred = len(self.failure_model.failure_history) == 0
-    server_do_fail = self.failure_model.failure_characteristics["number_of_failures"][
-        "upper_bound"
-    ] > 0 and self.failure_model.initial_failure_time_step != float("inf")
+    server_do_fail = self.failure_model.failure_characteristics["number_of_failures"]["upper_bound"] > 0 and self.failure_model.initial_failure_time_step != float("inf")
 
     if server_do_fail:
         if len(self.failure_model.failure_history) == 0:

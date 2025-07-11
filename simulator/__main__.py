@@ -65,16 +65,13 @@ def main(parameters: dict):
     # Finishing the simulation's execution time counter
     final_time = time.time()
 
-    display_simulation_metrics(simulation_parameters=parameters, simulation_execution_time=final_time - start_time)
-
-
 if __name__ == "__main__":
     # Parsing named arguments from the command line
     parser = argparse.ArgumentParser()
 
     # Generic arguments
     parser.add_argument("--seed", "-s", help="Seed value for EdgeSimPy", default="1")
-    parser.add_argument("--input", "-i", help="Input dataset file", default="datasets/dataset1.json")
+    parser.add_argument("--input", "-i", help="Input dataset file", default="datasets/dataset.json")
     parser.add_argument("--algorithm", "-a", help="Algorithm that will be executed", required=True)
     parser.add_argument("--time-steps", "-t", help="Number of time steps (seconds) to be simulated", required=True)
 
