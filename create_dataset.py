@@ -71,7 +71,6 @@ def edge_server_to_dict(self) -> dict:
     dictionary = {
         "attributes": {
             "id": self.id,
-            "available": self.available,
             "model_name": self.model_name,
             "cpu": self.cpu,
             "memory": self.memory,
@@ -85,6 +84,7 @@ def edge_server_to_dict(self) -> dict:
             "power_model_parameters": self.power_model_parameters,
             "time_to_boot": self.time_to_boot,
             "status": self.status,
+            "available": self.available,
         },
         "relationships": {
             "failure_model": {"class": type(self.failure_model).__name__, "id": self.failure_model.id} if self.failure_model else None,
@@ -218,12 +218,10 @@ for spec in edge_server_specifications:
 
         # Failure-related attributes
         server.time_to_boot = spec["time_to_boot"]
-        if spec["initial_failure_time_step"] > 1:
-            server.status = "available"
-        else:
-            server.status = "failing"
+        server.status = "available"
+        server.available = True
 
-        # Defining the failure history
+        # Defining the failure trace
         initial_failure_time_step = -2550
         BaseFailureGroupModel(
             device=server,
@@ -236,11 +234,33 @@ for spec in edge_server_specifications:
             },
             number_of_failure_groups_to_create=20,
         )
+        # Creating the failure history (only for failures that started before the simulation began - "becomes_available_at" < 0)
+        # and defining status and availability according to failure history.
+        should_halt_failure_loops = False
         server.failure_model.failure_history = []
         for failure_group in server.failure_model.failure_trace:
+            if should_halt_failure_loops:
+                break
             for failure in failure_group:
                 if failure["becomes_available_at"] < 0:
                     server.failure_model.failure_history.append(failure)
+                else:
+                    if failure["starts_booting_at"] <= 0 and failure["finishes_booting_at"] > 0:
+                        server.status = "booting"
+                        server.available = False
+                    elif failure["failure_starts_at"] <= 0:
+                        server.status = "failing"
+                        server.available = False
+                    # print("\n")
+                    # print(server)
+                    # print(server.status)
+                    # print(server.available)
+                    
+                    # print(failure)
+                    # print("\n")
+                    should_halt_failure_loops = True
+                    break
+
 
 display_topology(topology=Topology.first())
 
@@ -437,6 +457,10 @@ for index, service in enumerate(services_sorted_randomly):
 
 # Defining the initial service placement
 randomized_closest_fit()
+
+# Updating service availability based on server status
+for service in Service.all():
+    service._available = service.server.available if service.server else False
 
 # Calculating user communication paths and application delays
 for user in User.all():

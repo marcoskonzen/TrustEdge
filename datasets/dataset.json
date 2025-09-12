@@ -2641,7 +2641,7 @@
                     ]
                 ],
                 "delays": {
-                    "1": 9
+                    "1": Infinity
                 },
                 "delay_slas": {
                     "1": 30
@@ -2757,7 +2757,7 @@
                     ]
                 ],
                 "delays": {
-                    "3": 9
+                    "3": Infinity
                 },
                 "delay_slas": {
                     "3": 20
@@ -3162,7 +3162,7 @@
                     ]
                 ],
                 "delays": {
-                    "10": 9
+                    "10": Infinity
                 },
                 "delay_slas": {
                     "10": 30
@@ -3338,7 +3338,7 @@
                     ]
                 ],
                 "delays": {
-                    "13": 9
+                    "13": Infinity
                 },
                 "delay_slas": {
                     "13": 30
@@ -3397,7 +3397,7 @@
                     ]
                 ],
                 "delays": {
-                    "14": 12
+                    "14": Infinity
                 },
                 "delay_slas": {
                     "14": 20
@@ -3457,7 +3457,7 @@
                     ]
                 ],
                 "delays": {
-                    "15": 9
+                    "15": Infinity
                 },
                 "delay_slas": {
                     "15": 20
@@ -3689,7 +3689,7 @@
                     ]
                 ],
                 "delays": {
-                    "19": 3
+                    "19": Infinity
                 },
                 "delay_slas": {
                     "19": 30
@@ -3862,7 +3862,7 @@
                     ]
                 ],
                 "delays": {
-                    "22": 6
+                    "22": Infinity
                 },
                 "delay_slas": {
                     "22": 30
@@ -4096,7 +4096,7 @@
                     ]
                 ],
                 "delays": {
-                    "26": 6
+                    "26": Infinity
                 },
                 "delay_slas": {
                     "26": 30
@@ -4270,7 +4270,7 @@
                     ]
                 ],
                 "delays": {
-                    "29": 6
+                    "29": Infinity
                 },
                 "delay_slas": {
                     "29": 30
@@ -4623,7 +4623,7 @@
                     ]
                 ],
                 "delays": {
-                    "35": 3
+                    "35": Infinity
                 },
                 "delay_slas": {
                     "35": 20
@@ -4680,7 +4680,7 @@
                     ]
                 ],
                 "delays": {
-                    "36": 6
+                    "36": Infinity
                 },
                 "delay_slas": {
                     "36": 20
@@ -4854,7 +4854,7 @@
                     ]
                 ],
                 "delays": {
-                    "39": 9
+                    "39": Infinity
                 },
                 "delay_slas": {
                     "39": 20
@@ -4913,7 +4913,7 @@
                     ]
                 ],
                 "delays": {
-                    "40": 6
+                    "40": Infinity
                 },
                 "delay_slas": {
                     "40": 20
@@ -5030,7 +5030,7 @@
                     ]
                 ],
                 "delays": {
-                    "42": 3
+                    "42": Infinity
                 },
                 "delay_slas": {
                     "42": 30
@@ -5146,7 +5146,7 @@
                     ]
                 ],
                 "delays": {
-                    "44": 9
+                    "44": Infinity
                 },
                 "delay_slas": {
                     "44": 30
@@ -5205,7 +5205,7 @@
                     ]
                 ],
                 "delays": {
-                    "45": 3
+                    "45": Infinity
                 },
                 "delay_slas": {
                     "45": 30
@@ -5320,7 +5320,7 @@
                     ]
                 ],
                 "delays": {
-                    "47": 3
+                    "47": Infinity
                 },
                 "delay_slas": {
                     "47": 20
@@ -5612,7 +5612,7 @@
                     ]
                 ],
                 "delays": {
-                    "52": 9
+                    "52": Infinity
                 },
                 "delay_slas": {
                     "52": 20
@@ -5671,7 +5671,7 @@
                     ]
                 ],
                 "delays": {
-                    "53": 3
+                    "53": Infinity
                 },
                 "delay_slas": {
                     "53": 30
@@ -5846,7 +5846,7 @@
                     ]
                 ],
                 "delays": {
-                    "56": 6
+                    "56": Infinity
                 },
                 "delay_slas": {
                     "56": 30
@@ -9675,7 +9675,7 @@
                 "id": 1,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 4,
                 "memory_demand": 4,
                 "image_digest": "sha256:94c2dc"
@@ -9717,7 +9717,7 @@
                 "id": 3,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 4,
                 "memory_demand": 4,
                 "image_digest": "sha256:8a59a1"
@@ -9864,7 +9864,7 @@
                 "id": 10,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 4,
                 "memory_demand": 4,
                 "image_digest": "sha256:44dfae"
@@ -9927,7 +9927,7 @@
                 "id": 13,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 4,
                 "memory_demand": 4,
                 "image_digest": "sha256:36c00f"
@@ -9948,7 +9948,7 @@
                 "id": 14,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 8,
                 "memory_demand": 8,
                 "image_digest": "sha256:36c00f"
@@ -9969,7 +9969,7 @@
                 "id": 15,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 1,
                 "memory_demand": 1,
                 "image_digest": "sha256:94c2dc"
@@ -10053,7 +10053,7 @@
                 "id": 19,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 4,
                 "memory_demand": 4,
                 "image_digest": "sha256:44dfae"
@@ -10116,7 +10116,7 @@
                 "id": 22,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 1,
                 "memory_demand": 1,
                 "image_digest": "sha256:44dfae"
@@ -10200,7 +10200,7 @@
                 "id": 26,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 8,
                 "memory_demand": 8,
                 "image_digest": "sha256:8a59a1"
@@ -10263,7 +10263,7 @@
                 "id": 29,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 2,
                 "memory_demand": 2,
                 "image_digest": "sha256:36c00f"
@@ -10389,7 +10389,7 @@
                 "id": 35,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 4,
                 "memory_demand": 4,
                 "image_digest": "sha256:607749"
@@ -10410,7 +10410,7 @@
                 "id": 36,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 1,
                 "memory_demand": 1,
                 "image_digest": "sha256:cbb0b8"
@@ -10473,7 +10473,7 @@
                 "id": 39,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 8,
                 "memory_demand": 8,
                 "image_digest": "sha256:44dfae"
@@ -10494,7 +10494,7 @@
                 "id": 40,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 4,
                 "memory_demand": 4,
                 "image_digest": "sha256:cbb0b8"
@@ -10536,7 +10536,7 @@
                 "id": 42,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 4,
                 "memory_demand": 4,
                 "image_digest": "sha256:36c00f"
@@ -10578,7 +10578,7 @@
                 "id": 44,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 8,
                 "memory_demand": 8,
                 "image_digest": "sha256:9d0e17"
@@ -10599,7 +10599,7 @@
                 "id": 45,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 1,
                 "memory_demand": 1,
                 "image_digest": "sha256:94c2dc"
@@ -10641,7 +10641,7 @@
                 "id": 47,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 2,
                 "memory_demand": 2,
                 "image_digest": "sha256:607749"
@@ -10746,7 +10746,7 @@
                 "id": 52,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 4,
                 "memory_demand": 4,
                 "image_digest": "sha256:b060ff"
@@ -10767,7 +10767,7 @@
                 "id": 53,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 4,
                 "memory_demand": 4,
                 "image_digest": "sha256:607749"
@@ -10830,7 +10830,7 @@
                 "id": 56,
                 "label": "",
                 "state": 0,
-                "_available": true,
+                "_available": false,
                 "cpu_demand": 8,
                 "memory_demand": 8,
                 "image_digest": "sha256:f84c7a"
@@ -12152,7 +12152,6 @@
         {
             "attributes": {
                 "id": 1,
-                "available": true,
                 "model_name": "PowerEdge R620",
                 "cpu": 16,
                 "memory": 24,
@@ -12171,7 +12170,8 @@
                     "max_power_consumption": 243
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "booting",
+                "available": false
             },
             "relationships": {
                 "failure_model": {
@@ -12255,7 +12255,6 @@
         {
             "attributes": {
                 "id": 2,
-                "available": true,
                 "model_name": "PowerEdge R620",
                 "cpu": 16,
                 "memory": 24,
@@ -12274,7 +12273,8 @@
                     "max_power_consumption": 243
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "booting",
+                "available": false
             },
             "relationships": {
                 "failure_model": {
@@ -12374,7 +12374,6 @@
         {
             "attributes": {
                 "id": 3,
-                "available": true,
                 "model_name": "PowerEdge R620",
                 "cpu": 16,
                 "memory": 24,
@@ -12393,7 +12392,8 @@
                     "max_power_consumption": 243
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "available",
+                "available": true
             },
             "relationships": {
                 "failure_model": {
@@ -12493,7 +12493,6 @@
         {
             "attributes": {
                 "id": 4,
-                "available": true,
                 "model_name": "PowerEdge R620",
                 "cpu": 16,
                 "memory": 24,
@@ -12512,7 +12511,8 @@
                     "max_power_consumption": 243
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "failing",
+                "available": false
             },
             "relationships": {
                 "failure_model": {
@@ -12584,7 +12584,6 @@
         {
             "attributes": {
                 "id": 5,
-                "available": true,
                 "model_name": "PowerEdge R620",
                 "cpu": 16,
                 "memory": 24,
@@ -12603,7 +12602,8 @@
                     "max_power_consumption": 243
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "available",
+                "available": true
             },
             "relationships": {
                 "failure_model": {
@@ -12715,7 +12715,6 @@
         {
             "attributes": {
                 "id": 6,
-                "available": true,
                 "model_name": "PowerEdge R620",
                 "cpu": 16,
                 "memory": 24,
@@ -12734,7 +12733,8 @@
                     "max_power_consumption": 243
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "failing",
+                "available": false
             },
             "relationships": {
                 "failure_model": {
@@ -12814,7 +12814,6 @@
         {
             "attributes": {
                 "id": 7,
-                "available": true,
                 "model_name": "PowerEdge R620",
                 "cpu": 16,
                 "memory": 24,
@@ -12833,7 +12832,8 @@
                     "max_power_consumption": 243
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "booting",
+                "available": false
             },
             "relationships": {
                 "failure_model": {
@@ -12889,7 +12889,6 @@
         {
             "attributes": {
                 "id": 8,
-                "available": true,
                 "model_name": "PowerEdge R620",
                 "cpu": 16,
                 "memory": 24,
@@ -12908,7 +12907,8 @@
                     "max_power_consumption": 243
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "failing",
+                "available": false
             },
             "relationships": {
                 "failure_model": {
@@ -12952,7 +12952,6 @@
         {
             "attributes": {
                 "id": 9,
-                "available": true,
                 "model_name": "SGI",
                 "cpu": 32,
                 "memory": 32,
@@ -12971,7 +12970,8 @@
                     "max_power_consumption": 1387
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "available",
+                "available": true
             },
             "relationships": {
                 "failure_model": {
@@ -13095,7 +13095,6 @@
         {
             "attributes": {
                 "id": 10,
-                "available": true,
                 "model_name": "SGI",
                 "cpu": 32,
                 "memory": 32,
@@ -13114,7 +13113,8 @@
                     "max_power_consumption": 1387
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "available",
+                "available": true
             },
             "relationships": {
                 "failure_model": {
@@ -13202,7 +13202,6 @@
         {
             "attributes": {
                 "id": 11,
-                "available": true,
                 "model_name": "SGI",
                 "cpu": 32,
                 "memory": 32,
@@ -13221,7 +13220,8 @@
                     "max_power_consumption": 1387
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "available",
+                "available": true
             },
             "relationships": {
                 "failure_model": {
@@ -13277,7 +13277,6 @@
         {
             "attributes": {
                 "id": 12,
-                "available": true,
                 "model_name": "SGI",
                 "cpu": 32,
                 "memory": 32,
@@ -13296,7 +13295,8 @@
                     "max_power_consumption": 1387
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "available",
+                "available": true
             },
             "relationships": {
                 "failure_model": {
@@ -13497,7 +13497,6 @@
         {
             "attributes": {
                 "id": 13,
-                "available": true,
                 "model_name": "SGI",
                 "cpu": 32,
                 "memory": 32,
@@ -13516,7 +13515,8 @@
                     "max_power_consumption": 1387
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "available",
+                "available": true
             },
             "relationships": {
                 "failure_model": {
@@ -13632,7 +13632,6 @@
         {
             "attributes": {
                 "id": 14,
-                "available": true,
                 "model_name": "SGI",
                 "cpu": 32,
                 "memory": 32,
@@ -13651,7 +13650,8 @@
                     "max_power_consumption": 1387
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "booting",
+                "available": false
             },
             "relationships": {
                 "failure_model": {
@@ -13783,7 +13783,6 @@
         {
             "attributes": {
                 "id": 15,
-                "available": true,
                 "model_name": "SGI",
                 "cpu": 32,
                 "memory": 32,
@@ -13802,7 +13801,8 @@
                     "max_power_consumption": 1387
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "available",
+                "available": true
             },
             "relationships": {
                 "failure_model": {
@@ -13918,7 +13918,6 @@
         {
             "attributes": {
                 "id": 16,
-                "available": true,
                 "model_name": "SGI",
                 "cpu": 32,
                 "memory": 32,
@@ -13937,7 +13936,8 @@
                     "max_power_consumption": 1387
                 },
                 "time_to_boot": 10,
-                "status": "failing"
+                "status": "available",
+                "available": true
             },
             "relationships": {
                 "failure_model": {

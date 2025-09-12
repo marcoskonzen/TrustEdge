@@ -7,115 +7,13 @@ from json import dumps
 # Importing helper functions
 from simulator.helper_functions import *
 
-# Importing EdgeSimPy extensions
 from simulator.extensions import *
 
 # Importing logging modules
 import math
 from datetime import datetime
 
-
-"""TRUST EDGE ALGORITHM"""
-
-def trust_edge(parameters: dict = {}):
-    """Algoritmo principal que implementa a lógica do TrustEdge.
-    
-    Args:
-        parameters (dict): Parâmetros da simulação.
-    """
-
-    # Verificando se existem usuários fazendo requisição de acesso à aplicação
-    current_step = parameters.get("current_step") - 1
-    apps_metadata = []
-    for user in User.all():
-        if is_making_request(user, current_step):
-            # Para cada usuário fazendo requisição, coletar informações das aplicações
-            for app in user.applications:
-                app_attrs = {
-                    "object": app,
-                    "delay_sla": app.users[0].delay_slas[str(app.id)],
-                    "delay_score": get_application_delay_score(app),
-                }
-                apps_metadata.append(app_attrs)
-
-    apps_metadata = sorted(apps_metadata, key=lambda app: app["delay_score"], reverse=True)
-
-    # Iterando sobre a lista ordenada das aplicações para provisionamento
-    for app_metadata in apps_metadata:
-        app = app_metadata["object"]
-        user = app.users[0]
-        service = app.services[0]
-
-        print(f"\n[LOG] Aplicações com requisições no step {current_step}:")
-        print(f" - Aplicação {app_metadata['object'].id}: Delay Score={app_metadata['delay_score']} e SLA={app_metadata['delay_sla']}")
-        print(f"[LOG] Demanda da aplicação: CPU={service.cpu_demand}, RAM={service.memory_demand}")
-
-        # Obtendo a lista de servidores de borda candidatos para hospedar o serviço
-        edge_servers = get_host_candidates(user=user, service=service)
-
-        # Finding the minimum and maximum values for the edge server attributes
-        min_and_max = find_minimum_and_maximum(metadata=edge_servers)
-
-        # Sorting edge server host candidates based on the number of SLA violations they
-        # would cause to the application and their power consumption and delay costs
-        edge_servers = sorted(
-            edge_servers,
-            key=lambda s: (
-                s["sla_violations"],
-                get_norm(metadata=s, attr_name="trust_score", min=min_and_max["minimum"], max=min_and_max["maximum"]),
-            ),
-        )
-
-        # Greedily iterating over the list of edge servers to find a host for the service
-        for edge_server_metadata in edge_servers:
-            edge_server = edge_server_metadata["object"]
-
-            # print("\n[LOG] Edge Server candidates for hosting the service:")
-            # print(edge_server_metadata)
-            
-            if edge_server == service.server:
-                print(f"[LOG] Service is already hosted on Edge Server {edge_server}. Skipping...")
-                break
-
-            print(f"[LOG] Tentando provisionar em {edge_server}. CPU demandada: {edge_server.cpu_demand}/{edge_server.cpu}, RAM demandada: {edge_server.memory_demand}/{edge_server.memory}. Disk demandada: {edge_server.disk_demand}/{edge_server.disk}")
-
-            # Provisioning the service on the best edge server found it it has enough resources
-            if edge_server.has_capacity_to_host(service):
-                print(f"[LOG] Edge Server host service before provisioning: {service.server}")
-                
-                provision(user=user, application=app, service=service, edge_server=edge_server)
-                
-                print(f"[LOG] Provisioning {service} of {app} for {user} on {edge_server} at step {current_step}")
-                print("\n")
-                
-                break
-
-            # else:
-            #     raise Exception(f"{app} could not be provisioned.")
-
-    # Exibindo métricas de confiabilidade
-    #display_reliability_metrics(parameters=parameters)
-
-    # Exibindo métricas de simulação
-    display_simulation_metrics(simulation_parameters=parameters)
-
-    # print(f"\n[LOG] Aplicações com requisições no step {current_step}:")
-    # for app in apps_metadata:
-    #     print(f" - Aplicação {app['object'].id}: Delay Score={app['delay_score']}")
-
-    # print(f"\n[LOG] Usuários fazendo requisições no step {current_step}:")
-    # print(users_making_requests)
-    # print("\n")
-
-    # Exibindo informações detalhadas das aplicações, seus servidores e usuários
-    #display_application_info()
-
-    # Registrar o estado atual de todas as entidades para diagnóstico
-    #print("[DEBUG] Chamando log_entities_state")
-    #display_log_entities_state(parameters)
-
-
-""" CALCULATING RELIABILITY METRICS AND SCORES """
+# Calculating reliability metrics
 
 def get_server_total_failures(server):
     """Retorna o número total de falhas de um servidor.
@@ -206,6 +104,13 @@ def get_server_downtime_simulation(server):
     
     total_downtime = 0
     
+    # for failure_occurrence in server.failure_model.failure_history:
+    #     # Só considera falhas que aconteceram durante a simulação efetiva (início >= current_step)
+    #     if failure_occurrence["failure_starts_at"] >= current_step and failure_occurrence["becomes_available_at"] < current_step:
+    #         # Calcula o tempo de falha até o step atual ou até o reparo, o que vier primeiro
+    #         failure_start = max(failure_occurrence["failure_starts_at"], current_step)
+    #         failure_end = min(failure_occurrence["becomes_available_at"], current_step)
+    #         total_downtime += failure_end - failure_start
     for available in server.available_history:
         if available is False:
             total_downtime += 1
@@ -226,6 +131,21 @@ def get_server_uptime_simulation(server):
         O step 1 (primeiro step) não é considerado pois é usado apenas para inicialização.
         As métricas de simulação começam a contar a partir do step 2.
     """
+    # current_step = server.model.schedule.steps + 1
+    
+    # # Se ainda estamos no step 1 (inicialização), retorna 0
+    # if current_step <= 1:
+    #     return 0
+    
+    # # Simulação efetiva vai do step 2 até o step atual
+    # simulation_start = 2
+    # simulation_duration = current_step - simulation_start + 1
+    
+    # # O uptime é o tempo total da simulação efetiva menos o downtime
+    # total_downtime = get_server_downtime_simulation(server=server)
+    # total_uptime = simulation_duration - total_downtime
+    
+    # return max(0, total_uptime)  # Garantir que não seja negativo
 
     total_uptime = 0
 
@@ -340,10 +260,28 @@ def get_user_perceived_downtime(application):
         int: O número de timesteps onde o usuário percebeu downtime.
         
     Note:
-        O downtime percebido é baseado no histórico de downtime da aplicação.
-        Se o usuário não tiver histórico suficiente, retorna 0.
+        O step 1 (primeiro step) não é considerado pois é usado apenas para inicialização.
+        As métricas de simulação começam a contar a partir do step 2.
     """
+    # if not hasattr(user, "user_perceived_downtime_history"):
+    #     return 0
+        
+    # if str(application_id) not in user.user_perceived_downtime_history:
+    #     return 0
+
+    # perceived_downtime = 0
+  
+    # for downtime in application.downtime_history:
+    #     if downtime is True:
+    #         perceived_downtime += 1
+
     
+    # Se não há histórico suficiente (step 1 ou menos), retorna 0
+    # if len(downtime_history) <= 1:
+    #     return 0
+        
+    # Conta os casos onde o usuário percebeu downtime (True nos registros)
+    # Pular o primeiro item do histórico (step 1 de inicialização)
     perceived_downtime = sum(1 for status in application.downtime_history if status)
     return perceived_downtime
 
@@ -425,7 +363,6 @@ def get_application_delay_score(app: object) -> float:
 
     return app_delay_score
 
-
 def get_server_trust_score(server):
     """Calcula um score de risco instantâneo para o servidor.
     
@@ -453,6 +390,13 @@ def get_server_trust_score(server):
     # Caso especial: servidor nunca falhou ou tem dados históricos insuficientes
     if failure_rate == 0 or mtbf == float("inf"):
         return 0
+    
+    # Caso especial: se time_since_repair for infinito, significa que não há registros 
+    # de reparos concluídos antes do tempo atual, então usamos um valor padrão
+    # if time_since_repair == float("inf"):
+    #     # Consideramos que o servidor está em seu primeiro ciclo de vida
+    #     # e usa um valor proporcional pequeno (10% do MTBF) para não superestimar o risco
+    #     time_since_repair = 0.1 * mtbf
 
     if time_since_repair == 0:
         return float("inf")  # Risco máximo se o servidor está atualmente em falha  
@@ -460,6 +404,8 @@ def get_server_trust_score(server):
     # Calcular a proporção do tempo desde o último reparo em relação ao MTBF
     proportion = time_since_repair / mtbf
     
+    # Limitar a proporção a um máximo de 2.0 para evitar crescimento excessivo
+    #proportion = min(proportion, 2.0)
 
     # Cálculo: multiplicar a taxa de falha pela proporção do tempo desde reparo/MTBF
     # Quanto menor o resultado, menor o risco de falha (mais confiável)
@@ -507,127 +453,6 @@ def get_host_candidates(user: object, service: object) -> list:
         )
 
     return host_candidates
-
-
-def is_ongoing_failure(server, current_step=None):
-    """Verifica se o servidor tem uma falha em andamento no momento atual.
-    
-    Args:
-        server (EdgeServer): O objeto servidor.
-        current_time (int, opcional): O tempo atual da simulação. 
-                                    Se não fornecido, será calculado baseado no step atual.
-    
-    Returns:
-        bool: True se houver uma falha em andamento, False caso contrário.
-    """
-    # Se o tempo não foi fornecido, calcular baseado no step atual
-    if current_step is None:
-        current_step = server.model.schedule.steps
-        
-    # Verificar se o servidor tem histórico de falhas
-    if not server.failure_model.failure_history:
-        return False
-        
-    # Aplanar o failure_history para facilitar a busca
-    flatten_failure_trace = [item for failure_group in server.failure_model.failure_trace for item in failure_group]
-    
-    # Procurar por uma falha que inclua o tempo atual
-    ongoing_failure = next(
-        (
-            failure
-            for failure in flatten_failure_trace
-            if failure["failure_starts_at"] <= current_step and current_step < failure["becomes_available_at"]
-        ),
-        None,
-    )
-    
-    return ongoing_failure is not None
-
-
-def is_making_request(user, current_step):
-    """Verifica se um usuário está fazendo uma requisição em um determinado step.
-
-    Args:
-        user (User): O objeto usuário.
-        current_step (int): O step atual da simulação.
-
-    Returns:
-        bool: True se o usuário está fazendo uma requisição, False caso contrário.
-    """
-    for app in user.applications:
-        last_access = user.access_patterns[str(app.id)].history[-1]
-        if current_step == last_access["start"]:
-            return True
-    return False
-
-
-def display_log_entities_state(parameters: dict = {}):
-    """
-    Função para mostrar o status de servidores, aplicações e serviços em cada step da simulação.
-    
-    Reflete apenas os status coletados e atualizados pelos extensions (edge_server_extensions.py 
-    e application_extensions.py), sem fazer cálculos ou modificações.
-    
-    Args:
-        model: O objeto modelo da simulação.
-        
-    Note:
-      
-    """
-    try:
-        # Obter o step atual
-
-        current_step = parameters.get("current_step")
-
-        
-        print(f"\n[LOG] ===== STATUS - STEP {current_step} =====")
-        
-        # Status dos servidores (coletado do edge_server_extensions.py)
-        print("\n--- SERVIDORES ---")
-        for server in EdgeServer.all():
-            # Apenas refletir os status já definidos pelos extensions
-            _available = getattr(server, 'available', 'N/A')
-            _status = getattr(server, 'status', 'N/A')
-            
-            # Verificar se há falha em andamento (para informação)
-            failure_info = f", OngoingFailure={is_ongoing_failure(server)}"
-
-            print(f"Servidor {server.id}: Available={_available}, Status={_status}{failure_info}")
-        
-        # Status dos serviços (sincronizados via update_service_availability())
-        print("\n--- SERVIÇOS ---")
-        for service in Service.all():
-            # Apenas refletir os status já sincronizados
-            service_available = getattr(service, '_available', 'N/A')
-            server_id = service.server.id if hasattr(service, 'server') and service.server else 'N/A'
-            server_available = getattr(service.server, 'available', 'N/A') if hasattr(service, 'server') and service.server else 'N/A'
-            
-            print(f"Serviço {service.id}: Available={service_available}, Servidor={server_id} (Available={server_available})")
-
-        # Status das aplicações (coletado do application_extensions.py)
-        print("\n--- APLICAÇÕES ---")
-        for application in Application.all():
-            # Apenas refletir o status já definido pelos extensions
-            availability_status = getattr(application, 'availability_status', 'N/A')
-            
-            # Mostrar histórico apenas para debug, mas métricas só contam a partir do step 2
-            #if hasattr(application, 'availability_history'):
-            uptime = get_application_uptime(application)
-            downtime = get_application_downtime(application)
-            uptime_info = f"Uptime={uptime}"
-            downtime_info = f"Downtime={downtime}"
-            # else:
-            #     uptime_info = "Histórico: vazio"
-            #     downtime_info = "não disponível"
-            
-            print(f"Aplicação {application.id}: Status={availability_status}, {uptime_info}, {downtime_info}")
-    
-        print(f"[LOG] ===== FIM STATUS - STEP {current_step} =====\n")
-
-    except Exception as e:
-        print(f"[LOG ERROR] Erro ao mostrar status: {str(e)}")
-        import traceback
-        traceback.print_exc()
 
 
 def display_simulation_metrics(simulation_parameters: dict):
@@ -770,7 +595,7 @@ def display_reliability_metrics(parameters: dict = {}):
         print(f"{rank:^5}|{server_id:^5}|{server_status:^10}|{risk_score_str:^12}|{failure_rate:^12.6f}|{time_repair_str:^10}|{mtbf_str:^10}|{mttr:^8.2f}|{failures:^8}|{risk_short_lived:^18}|{risk_long_lived:^18}|")
 
 
-def display_application_info():
+def print_application_info():
     """Exibe informações sobre as aplicações, seus servidores de alocação e usuários.
     Esta função mostra a cada passo da simulação onde cada aplicação está alocada
     e quais usuários estão acessando cada aplicação.
@@ -801,4 +626,163 @@ def display_application_info():
             status = "Online" if application.availability_status else "Offline"
             print(f"{application.id:^12}|{server_id:^12}|{'N/A':^12}|{status:^10}")
 
+
+def is_ongoing_failure(server, current_step=None):
+    """Verifica se o servidor tem uma falha em andamento no momento atual.
+    
+    Args:
+        server (EdgeServer): O objeto servidor.
+        current_time (int, opcional): O tempo atual da simulação. 
+                                    Se não fornecido, será calculado baseado no step atual.
+    
+    Returns:
+        bool: True se houver uma falha em andamento, False caso contrário.
+    """
+    # Se o tempo não foi fornecido, calcular baseado no step atual
+    if current_step is None:
+        current_step = server.model.schedule.steps
+        
+    # Verificar se o servidor tem histórico de falhas
+    if not server.failure_model.failure_history:
+        return False
+        
+    # Aplanar o failure_history para facilitar a busca
+    flatten_failure_trace = [item for failure_group in server.failure_model.failure_trace for item in failure_group]
+    
+    # Procurar por uma falha que inclua o tempo atual
+    ongoing_failure = next(
+        (
+            failure
+            for failure in flatten_failure_trace
+            if failure["failure_starts_at"] <= current_step and current_step < failure["becomes_available_at"]
+        ),
+        None,
+    )
+    
+    return ongoing_failure is not None
+
+
+def is_making_request(user, current_step):
+    """Verifica se um usuário está fazendo uma requisição em um determinado step.
+
+    Args:
+        user (User): O objeto usuário.
+        current_step (int): O step atual da simulação.
+
+    Returns:
+        bool: True se o usuário está fazendo uma requisição, False caso contrário.
+    """
+    for app in user.applications:
+        last_access = user.access_patterns[str(app.id)].history[-1]
+        if current_step == last_access["start"]:
+            return True
+    return False
+
+
+def log_entities_state(parameters: dict = {}):
+    """
+    Função para mostrar o status de servidores, aplicações e serviços em cada step da simulação.
+    
+    Reflete apenas os status coletados e atualizados pelos extensions (edge_server_extensions.py 
+    e application_extensions.py), sem fazer cálculos ou modificações.
+    
+    Args:
+        model: O objeto modelo da simulação.
+        
+    Note:
+      
+    """
+    try:
+        # Obter o step atual
+
+        current_step = parameters.get("current_step")
+
+        
+        print(f"\n[LOG] ===== STATUS - STEP {current_step} =====")
+        
+        # Status dos servidores (coletado do edge_server_extensions.py)
+        print("\n--- SERVIDORES ---")
+        for server in EdgeServer.all():
+            # Apenas refletir os status já definidos pelos extensions
+            _available = getattr(server, 'available', 'N/A')
+            _status = getattr(server, 'status', 'N/A')
+            
+            # Verificar se há falha em andamento (para informação)
+            failure_info = f", OngoingFailure={is_ongoing_failure(server)}"
+
+            print(f"Servidor {server.id}: Available={_available}, Status={_status}{failure_info}")
+        
+        # Status dos serviços (sincronizados via update_service_availability())
+        print("\n--- SERVIÇOS ---")
+        for service in Service.all():
+            # Apenas refletir os status já sincronizados
+            service_available = getattr(service, '_available', 'N/A')
+            server_id = service.server.id if hasattr(service, 'server') and service.server else 'N/A'
+            server_available = getattr(service.server, 'available', 'N/A') if hasattr(service, 'server') and service.server else 'N/A'
+            
+            print(f"Serviço {service.id}: Available={service_available}, Servidor={server_id} (Available={server_available})")
+
+        # Status das aplicações (coletado do application_extensions.py)
+        print("\n--- APLICAÇÕES ---")
+        for application in Application.all():
+            # Apenas refletir o status já definido pelos extensions
+            availability_status = getattr(application, 'availability_status', 'N/A')
+            
+            # Mostrar histórico apenas para debug, mas métricas só contam a partir do step 2
+            #if hasattr(application, 'availability_history'):
+            uptime = get_application_uptime(application)
+            downtime = get_application_downtime(application)
+            uptime_info = f"Uptime={uptime}"
+            downtime_info = f"Downtime={downtime}"
+            # else:
+            #     uptime_info = "Histórico: vazio"
+            #     downtime_info = "não disponível"
+            
+            print(f"Aplicação {application.id}: Status={availability_status}, {uptime_info}, {downtime_info}")
+    
+        print(f"[LOG] ===== FIM STATUS - STEP {current_step} =====\n")
+
+    except Exception as e:
+        print(f"[LOG ERROR] Erro ao mostrar status: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+"""TRUST EDGE ORIGINAL ALGORITHM"""
+
+def trust_edge_original(parameters: dict = {}):
+    """Algoritmo principal que implementa a lógica do TrustEdge.
+    
+    Args:
+        parameters (dict): Parâmetros da simulação.
+    """
+
+    
+    
+    
+
+    #print_application_info()
+
+    # Registrar o estado atual de todas as entidades para diagnóstico
+    #print("[DEBUG] Chamando log_entities_state")
+    #log_entities_state(parameters)
+
+    # print("==========================================================================")
+    # print(f"================= FIM DO STEP {current_step} ==========================")
+    # print("==========================================================================")
+    # print("\n\n")
+
+    # Exibindo métricas de confiabilidade
+    #display_reliability_metrics(parameters=parameters)
+
+    # Exibindo métricas de simulação
+    display_simulation_metrics(simulation_parameters=parameters)
+
+    # print(f"\n[LOG] Aplicações com requisições no step {current_step}:")
+    # for app in apps_metadata:
+    #     print(f" - Aplicação {app['object'].id}: Delay Score={app['delay_score']}")
+
+    # print(f"\n[LOG] Usuários fazendo requisições no step {current_step}:")
+    # print(users_making_requests)
+    # print("\n")
 

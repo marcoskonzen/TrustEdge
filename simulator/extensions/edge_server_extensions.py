@@ -30,7 +30,7 @@ def edge_server_step(self):
             "no_failure_has_occurred": no_failure_has_occurred,
             "last_failure_that_occurred_is_the_last_planned": last_failure_that_occurred_is_the_last_planned,
         }
-        # print(f"\n\n\n[STEP {self.model.schedule.steps}] {metadata}")
+        #print(f"\n\n\n[STEP {self.model.schedule.steps}] {metadata}")
 
         if no_failure_has_occurred or last_failure_that_occurred_is_the_last_planned:
             interval_between_sets = randint(
@@ -48,28 +48,37 @@ def edge_server_step(self):
             (
                 failure
                 for failure in flatten_failure_trace
-                if failure["failure_starts_at"] <= current_step + 1 and current_step <= failure["becomes_available_at"]
+                if failure["failure_starts_at"] <= current_step and current_step <= failure["becomes_available_at"]
             ),
-            [],
+            None,
         )
-
+        #print(f"\n\n\n[STEP {self.model.schedule.steps}] {ongoing_failure} for {self}\n\n\n")
+        
         # Updating the server status based on the ongoing failure status (if any)
-        if len(ongoing_failure) > 0:
+        if ongoing_failure is not None:
             # Checking whether the server status should be changed from "available" to "failing"
-            if self.status == "available" and current_step + 1 == ongoing_failure["failure_starts_at"]:
+            if self.status == "available" and current_step >= ongoing_failure["failure_starts_at"] and current_step < ongoing_failure["starts_booting_at"]:
                 self.status = "failing"
                 self.available = False
 
             # Checking whether the server status should be changed from "failing" to "booting"
-            elif self.status == "failing" and current_step + 1 == ongoing_failure["starts_booting_at"]:
+            elif self.status == "failing" and current_step >= ongoing_failure["starts_booting_at"] and current_step < ongoing_failure["becomes_available_at"]:
                 self.status = "booting"
+                self.available = False
 
             # Checking whether the server status should be changed from "booting" to "available"
-            elif self.status == "booting" and current_step + 1 == ongoing_failure["becomes_available_at"]:
+            # and append ongoing_failure to the failure history.
+            elif self.status == "booting" and current_step >= ongoing_failure["becomes_available_at"]:
                 self.status = "available"
                 self.available = True
                 if ongoing_failure not in self.failure_model.failure_history:
                     self.failure_model.failure_history.append(ongoing_failure)
+                    #print(f"\n\n\n[STEP {current_step}] {ongoing_failure} added to failure history of {self}\n\n\n")
+        else:
+            # If there is no ongoing failure, we can consider the server as healthy
+            self.status = "available"
+            self.available = True
+            #print(f"[STEP {self.model.schedule.steps}] No ongoing failure for {self}")
 
         if self.status == "available":
             for service in self.services:
@@ -95,7 +104,7 @@ def edge_server_step(self):
                     if migration["origin"] == self or migration["target"] == self:
                         # Interrupting the ongoing service migration
                         migration["status"] = "interrupted"
-                        migration["end"] = current_step + 1
+                        migration["end"] = current_step
 
                         # Updating the service's origin and target servers metadata
                         migration["target"].ongoing_migrations -= 1
@@ -157,5 +166,17 @@ def failure_history(self):
     return [
         failure_occurrence
         for failure_occurrence in self.failure_model.failure_history
-        if failure_occurrence["becomes_available_at"] < self.model.schedule.steps + 1
+        if failure_occurrence["becomes_available_at"] <= self.model.schedule.steps
     ]
+
+@property
+def available_history(self):
+    """Returns the server's availability history."""
+    if not hasattr(self, "_available_history"):
+        self._available_history = []
+
+    current_step = self.model.schedule.steps
+    if len(self._available_history) <= current_step:
+        self._available_history.append(self.available)
+
+    return self._available_history

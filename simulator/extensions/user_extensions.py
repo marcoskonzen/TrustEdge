@@ -1,3 +1,6 @@
+# Importing EdgeSimPy components
+from edge_sim_py.components.base_station import BaseStation
+
 def step(self):
     """Method that executes the events involving the object at each time step."""
     # Updating user access

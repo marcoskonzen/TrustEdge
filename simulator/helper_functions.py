@@ -449,3 +449,124 @@ def show_scenario_overview():
     print(f"\nOverall Occupation")
     print(f"\tCPU: {overall_cpu_occupation}%")
     print(f"\tRAM: {overall_memory_occupation}%")
+
+
+def find_shortest_path(origin_network_switch: object, target_network_switch: object) -> int:
+    """Finds the shortest path (delay used as weight) between two network switches (origin and target).
+
+    Args:
+        origin_network_switch (object): Origin network switch.
+        target_network_switch (object): Target network switch.
+
+    Returns:
+        path (list): Shortest path between the origin and target network switches.
+    """
+    topology = origin_network_switch.model.topology
+    path = []
+
+    if not hasattr(topology, "delay_shortest_paths"):
+        topology.delay_shortest_paths = {}
+
+    key = (origin_network_switch, target_network_switch)
+
+    if key in topology.delay_shortest_paths.keys():
+        path = topology.delay_shortest_paths[key]
+    else:
+        path = nx.shortest_path(G=topology, source=origin_network_switch, target=target_network_switch, weight="delay")
+        topology.delay_shortest_paths[key] = path
+
+    return path
+
+
+def calculate_path_delay(origin_network_switch: object, target_network_switch: object) -> int:
+    """Gets the distance (in terms of delay) between two network switches (origin and target).
+
+    Args:
+        origin_network_switch (object): Origin network switch.
+        target_network_switch (object): Target network switch.
+
+    Returns:
+        delay (int): Delay between the origin and target network switches.
+    """
+    topology = origin_network_switch.model.topology
+
+    path = find_shortest_path(origin_network_switch=origin_network_switch, target_network_switch=target_network_switch)
+    delay = topology.calculate_path_delay(path=path)
+
+    return delay
+
+
+def sign(value: int):
+    """Calculates the sign of a real number using the well-known "sign" function (https://wikipedia.org/wiki/Sign_function).
+
+    Args:
+        value (int): Value whose sign must be calculated.
+
+    Returns:
+        (int): Sign of the passed value.
+    """
+    if value > 0:
+        return 1
+    if value < 0:
+        return -1
+    return 0
+
+def provision(user: object, application: object, service: object, edge_server: object):
+    """Provisions an application's service on an edge server.
+
+    Args:
+        user (object): User that accesses the application.
+        application (object): Application to whom the service belongs.
+        service (object): Service to be provisioned.
+        edge_server (object): Edge server that will host the edge server.
+    """
+    # Updating the host's resource usage
+    edge_server.cpu_demand += service.cpu_demand
+    edge_server.memory_demand += service.memory_demand
+
+    # Creating relationship between the host and the registry
+    service.server = edge_server
+    edge_server.services.append(service)
+
+    for layer_metadata in edge_server._get_uncached_layers(service=service):
+        layer = ContainerLayer(
+            digest=layer_metadata.digest,
+            size=layer_metadata.size,
+            instruction=layer_metadata.instruction,
+        )
+
+        # Updating host's resource usage based on the layer size
+        edge_server.disk_demand += layer.size
+
+        # Creating relationship between the host and the layer
+        layer.server = edge_server
+        edge_server.container_layers.append(layer)
+
+    user.set_communication_path(app=application)
+
+    
+def reset_server(edge_server: object):
+    # Resets the edge server's resource demands.
+
+    # Resetting the demand
+    edge_server.cpu_demand = 0
+    edge_server.memory_demand = 0
+    edge_server.disk_demand = 0
+
+    # Deprovisioning services
+    for service in edge_server.services:
+        service.server = None
+    edge_server.services = []
+
+    # Removing layers from edge servers not initially set as hosts for container registries
+    if len(edge_server.container_registries) == 0:
+        layers = list(edge_server.container_layers)
+        edge_server.container_layers = []
+        for layer in layers:
+            layer.server = None
+            ContainerLayer.remove(layer)
+
+    for user in User.all():
+        for app in user.applications:
+            user.delays[str(app.id)] = 0
+            user.communication_paths[str(app.id)] = []

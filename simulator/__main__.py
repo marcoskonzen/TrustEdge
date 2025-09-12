@@ -21,10 +21,12 @@ def load_edgesimpy_extensions():
     # Loading the entity extensions
     EdgeServer.step = edge_server_step
     EdgeServer.failure_history = failure_history
+    EdgeServer.available_history = available_history
 
     Application.step = application_step
     Application.availability_status = availability_status
-
+    Application.availability_history = availability_history
+    Application.downtime_history = downtime_history
 
 def main(parameters: dict):
     # Defining a seed value to enable reproducible results
