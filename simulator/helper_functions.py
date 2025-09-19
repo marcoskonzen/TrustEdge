@@ -172,6 +172,26 @@ def get_normalized_capacity(object: object) -> float:
     return (object.cpu * object.memory * object.disk) ** (1 / 3)
 
 
+def get_normalized_free_capacity(object: object) -> float:
+    """Returns the normalized free capacity of a given entity.
+
+    Args:
+        object (object): Entity object to be analyzed.
+
+    Returns:
+        (float): Normalized capacity of the given entity.
+    """
+    free_cpu = object.cpu - object.cpu_demand
+    free_memory = object.memory - object.memory_demand
+    free_disk = object.disk - object.disk_demand
+    
+    # Retorna 0 se qualquer uma das capacidades livres for zero ou negativa
+    if free_cpu <= 0 or free_memory <= 0 or free_disk <= 0:
+        return 0.0
+   
+    return (free_cpu * free_memory * free_disk) ** (1 / 3)
+
+
 def get_normalized_demand(object: object) -> float:
     """Returns the normalized demand of a given entity.
 

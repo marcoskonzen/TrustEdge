@@ -372,12 +372,12 @@ access_pattern_specifications = [
     {
         "class": CircularDurationAndIntervalAccessPattern,
         "duration_values": [10, 10],  # How long the user will access the application at each call (Short-lived applications)
-        "interval_values": [40, 40],  # Interval (in time steps) between the user accesses
+        "interval_values": [120, 120],  # Interval (in time steps) between the user accesses
     },
     {
         "class": CircularDurationAndIntervalAccessPattern,
         "duration_values": [60, 60],  # How long the user will access the application at each call (Long-lived applications)
-        "interval_values": [120, 120],  # Interval (in time steps) between the user accesses
+        "interval_values": [40, 40],  # Interval (in time steps) between the user accesses
     },
 ]
 service_demands = [

@@ -17,7 +17,7 @@ from datetime import datetime
 
 """TRUST EDGE ALGORITHM"""
 
-def trust_edge(parameters: dict = {}):
+def trust_edge_v1(parameters: dict = {}):
     """Algoritmo principal que implementa a lógica do TrustEdge.
     
     Args:
@@ -57,12 +57,12 @@ def trust_edge(parameters: dict = {}):
         min_and_max = find_minimum_and_maximum(metadata=edge_servers)
 
         # Sorting edge server host candidates based on the number of SLA violations they
-        # would cause to the application and their power consumption and delay costs
+        # would cause to the application and their trust cost
         edge_servers = sorted(
             edge_servers,
             key=lambda s: (
                 s["sla_violations"],
-                get_norm(metadata=s, attr_name="trust_score", min=min_and_max["minimum"], max=min_and_max["maximum"]),
+                get_norm(metadata=s, attr_name="trust_cost", min=min_and_max["minimum"], max=min_and_max["maximum"]),
             ),
         )
 
@@ -412,8 +412,11 @@ def get_application_delay_score(app: object) -> float:
 
     # Gathering the list of hosts close enough to the user that could be used to host the services without violating the delay SLA
     edge_servers_that_dont_violate_delay_sla = 0
+    
     # Cria uma lista com servidores disponíveis
     available_servers = [s for s in EdgeServer.all() if s.status == "available"]
+    
+    # Itera sobre os servidores disponíveis e verifica quantos violam o SLA de delay
     for edge_server in available_servers:
         if calculate_path_delay(origin_network_switch=user_switch, target_network_switch=edge_server.network_switch) <= delay_sla:
             edge_servers_that_dont_violate_delay_sla += 1
@@ -426,15 +429,15 @@ def get_application_delay_score(app: object) -> float:
     return app_delay_score
 
 
-def get_server_trust_score(server):
-    """Calcula um score de risco instantâneo para o servidor.
-    
-    O score é calculado multiplicando-se:
+def get_server_trust_cost(server):
+    """Calcula um custo de risco instantâneo para o servidor.
+
+    O custo é calculado multiplicando-se:
     1. Taxa de falhas (quanto maior, pior)
     2. Proporção do tempo desde o último reparo em relação ao MTBF
        (quanto maior essa proporção, maior o risco de uma falha iminente)
-    
-    Um servidor com menor score de risco é mais confiável porque:
+
+    Um servidor com menor custo de risco é mais confiável porque:
     - Tem menor taxa de falhas historicamente
     - Ainda não se aproximou de seu MTBF desde o último reparo
     
@@ -442,7 +445,7 @@ def get_server_trust_score(server):
         server (EdgeServer): O objeto servidor.
         
     Returns:
-        float: Score de risco (quanto menor, melhor - indica maior confiabilidade).
+        float: Custo de risco (quanto menor, melhor - indica maior confiabilidade).
               Servidores que nunca falharam retornam 0 (máxima confiabilidade).
     """
     # Obter os valores dos parâmetros
@@ -463,9 +466,9 @@ def get_server_trust_score(server):
 
     # Cálculo: multiplicar a taxa de falha pela proporção do tempo desde reparo/MTBF
     # Quanto menor o resultado, menor o risco de falha (mais confiável)
-    risk_score = failure_rate * proportion
-    
-    return risk_score
+    risk_cost = failure_rate * proportion
+
+    return risk_cost
 
 
 def get_host_candidates(user: object, service: object) -> list:
@@ -488,8 +491,8 @@ def get_host_candidates(user: object, service: object) -> list:
         overall_delay = app_delay + additional_delay
         sla_violations = 1 if overall_delay > user.delay_slas[str(service.application.id)] else 0
 
-        # Gathering the edge server's trust score
-        trust_score_edge_server = get_server_trust_score(edge_server)
+        # Gathering the edge server's trust cost
+        trust_cost_edge_server = get_server_trust_cost(edge_server)
 
         # Gathering the edge server's power consumption cost based on its CPU usage
         static_power_consumption = edge_server.power_model_parameters["static_power_percentage"]
@@ -500,7 +503,7 @@ def get_host_candidates(user: object, service: object) -> list:
             {
                 "object": edge_server,
                 "sla_violations": sla_violations,
-                "trust_score": trust_score_edge_server,
+                "trust_cost": trust_cost_edge_server,
                 "power_consumption": power_consumption,
                 "overall_delay": overall_delay,
             }
@@ -647,7 +650,7 @@ def display_simulation_metrics(simulation_parameters: dict):
     for server in EdgeServer.all():
         # Métricas históricas (sempre calculadas, baseadas em dados pré-simulação)
         reliability = get_server_conditional_reliability(server, upcoming_instants=1)
-        trust_score = get_server_trust_score(server)
+        trust_cost = get_server_trust_cost(server)
         time_since_repair = get_time_since_last_repair(server)
 
 
@@ -657,7 +660,7 @@ def display_simulation_metrics(simulation_parameters: dict):
         sim_downtime = get_server_downtime_simulation(server)
         
         server_metrics[f"Server {server.id}"] = {
-            "Risk Score": trust_score,
+            "Risk Cost": trust_cost,
             "Simulation Uptime": sim_uptime,
             "Simulation Downtime": sim_downtime,
             "History Uptime": history_uptime,
@@ -705,12 +708,12 @@ def display_reliability_metrics(parameters: dict = {}):
     """Exibe um resumo das métricas de confiabilidade de todos os servidores.
     Esta função é útil para análises durante a execução da simulação.
     
-    Os servidores são ordenados por score de risco (crescente), 
+    Os servidores são ordenados pelo custo de risco (crescente), 
     onde valores menores indicam servidores mais confiáveis.
-    
-    O score de risco é calculado como: taxa_falha * (tempo_desde_reparo/MTBF)
+
+    O custo de risco é calculado como: taxa_falha * (tempo_desde_reparo/MTBF)
     Quanto mais próximo o servidor estiver de seu tempo médio entre falhas,
-    maior será seu score de risco.
+    maior será seu custo de risco.
     
     Args:
         model (Model, opcional): O objeto modelo da simulação para obter o step atual.
@@ -730,11 +733,11 @@ def display_reliability_metrics(parameters: dict = {}):
     # Cria uma lista com servidores disponíveis
     available_servers = [s for s in EdgeServer.all() if s.status == "available"]
 
-    # Ordenar por score de risco (crescente) - servidores mais confiáveis primeiro (menor score)
-    servers = sorted(available_servers, key=lambda s: get_server_trust_score(s))
-    
+    # Ordenar por custo de risco (crescente) - servidores mais confiáveis primeiro (menor custo)
+    servers = sorted(available_servers, key=lambda s: get_server_trust_cost(s))
+
     # Cabeçalho da tabela
-    print(f"{'Rank':^5}|{'ID':^5}|{'Status':^10}|{'Score Risco':^12}|{'Taxa Falha':^12}|{'T.Últ.Rep':^10}|{'MTBF':^10}|{'MTTR':^8}|{'Falhas':^8}|{'Conf. short_lived':^18}|{'Conf. long_lived':^18}|")
+    print(f"{'Rank':^5}|{'ID':^5}|{'Status':^10}|{'Custo do Risco':^12}|{'Taxa Falha':^12}|{'T.Últ.Rep':^10}|{'MTBF':^10}|{'MTTR':^8}|{'Falhas':^8}|{'Conf. short_lived':^18}|{'Conf. long_lived':^18}|")
     print(f"{'':^5}|{'':^5}|{'':^10}|{'(F×T/MTBF)':^12}|{'':^12}|{'':^10}|{'':^10}|{'':^8}|{'':^8}|{'':^18}|{'':^18}|")
     print("-" * 125)
 
@@ -744,7 +747,7 @@ def display_reliability_metrics(parameters: dict = {}):
         failures = get_server_total_failures(server)
         mttr = get_server_mttr(server)
         mtbf = get_server_mtbf(server)
-        risk_score = get_server_trust_score(server)
+        risk_cost = get_server_trust_cost(server)
         time_since_repair = get_time_since_last_repair(server)
         failure_rate = get_server_failure_rate(server)
         risk_short_lived = f"{get_server_conditional_reliability(server, upcoming_instants=10):.2f}"
@@ -760,14 +763,14 @@ def display_reliability_metrics(parameters: dict = {}):
             time_repair_str = "Nunca"
         else:
             time_repair_str = f"{time_since_repair:.2f}"
-        
-        # Formatação especial para risk score
-        if risk_score == 0:
-            risk_score_str = "Mínimo"
-        else:
-            risk_score_str = f"{risk_score:.4f}"
 
-        print(f"{rank:^5}|{server_id:^5}|{server_status:^10}|{risk_score_str:^12}|{failure_rate:^12.6f}|{time_repair_str:^10}|{mtbf_str:^10}|{mttr:^8.2f}|{failures:^8}|{risk_short_lived:^18}|{risk_long_lived:^18}|")
+        # Formatação especial para risk cost
+        if risk_cost == 0:
+            risk_cost_str = "Mínimo"
+        else:
+            risk_cost_str = f"{risk_cost:.4f}"
+
+        print(f"{rank:^5}|{server_id:^5}|{server_status:^10}|{risk_cost_str:^12}|{failure_rate:^12.6f}|{time_repair_str:^10}|{mtbf_str:^10}|{mttr:^8.2f}|{failures:^8}|{risk_short_lived:^18}|{risk_long_lived:^18}|")
 
 
 def display_application_info():
