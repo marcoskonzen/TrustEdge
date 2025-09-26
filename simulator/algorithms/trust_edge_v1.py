@@ -686,11 +686,13 @@ def display_simulation_metrics(simulation_parameters: dict):
     
     # Métricas detalhadas de usuários
     user_metrics = {}
+    total_perceived_downtime = 0
     for user in User.all():
         user_entry = {}
         for application in user.applications:
             perceived_downtime = get_user_perceived_downtime(application)
             user_entry[f"Application {application.id} Perceived Downtime"] = perceived_downtime
+            total_perceived_downtime += perceived_downtime
         user_metrics[f"User {user.id}"] = user_entry
 
     metrics = {
@@ -702,6 +704,7 @@ def display_simulation_metrics(simulation_parameters: dict):
     }
     
     print(dumps(metrics, indent=4))
+    print(f"Total Perceived Downtime: {total_perceived_downtime}")
 
 
 def display_reliability_metrics(parameters: dict = {}):

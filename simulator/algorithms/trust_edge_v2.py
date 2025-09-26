@@ -24,12 +24,12 @@ def trust_edge_v2(parameters: dict = {}):
         parameters (dict): Parâmetros da simulação.
     """
 
-    # Verificando se existem usuários fazendo requisição de acesso à aplicação
+    # Checking if there are users making access requests to applications
     current_step = parameters.get("current_step") - 1
     apps_metadata = []
     for user in User.all():
         if is_making_request(user, current_step):
-            # Para cada usuário fazendo requisição, coletar informações das aplicações
+            # For each user making requests, collect application information
             for app in user.applications:
                 app_attrs = {
                     "object": app,
@@ -50,8 +50,16 @@ def trust_edge_v2(parameters: dict = {}):
         (1 - get_norm(metadata=app, attr_name="demand_resource", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]))
     ), reverse=True
 )
+#     apps_metadata = sorted(
+#     apps_metadata, 
+#     key=lambda app: (
+#         get_norm(metadata=app, attr_name="delay_score", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]) +
+#         get_norm(metadata=app, attr_name="intensity_score", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]) +
+#         (1 - get_norm(metadata=app, attr_name="demand_resource", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]))
+#     ), reverse=True
+# )
 
-    # Iterando sobre a lista ordenada das aplicações para provisionamento
+    # Iterating over the sorted list of applications for provisioning
     for app_metadata in apps_metadata:
         app = app_metadata["object"]
         user = app.users[0]
@@ -61,7 +69,7 @@ def trust_edge_v2(parameters: dict = {}):
         print(f" - Aplicação {app_metadata['object'].id}: Delay Score={app_metadata['delay_score']} e SLA={app_metadata['delay_sla']}")
         print(f"[LOG] Demanda da aplicação: CPU={service.cpu_demand}, RAM={service.memory_demand}")
 
-        # Obtendo a lista de servidores de borda candidatos para hospedar o serviço
+        # Getting the list of edge server candidates to host the service
         edge_servers = get_host_candidates(user=user, service=service)
 
         if not edge_servers:
@@ -79,17 +87,17 @@ def trust_edge_v2(parameters: dict = {}):
                 key=lambda s: (
                     s["sla_violations"],
                     get_norm(metadata=s, attr_name="trust_cost", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
-                    (1 - get_norm(metadata=s, attr_name="free_capacity", min=min_and_max["minimum"], max=min_and_max["maximum"])),
+                    get_norm(metadata=s, attr_name="amount_of_uncached_layers", min=min_and_max["minimum"], max=min_and_max["maximum"]),
+                    
                 ),
             )
-            
             # edge_servers = sorted(
             #     edge_servers,
             #     key=lambda s: (
-            #         get_norm(metadata=s, attr_name="sla_violations", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
+            #         s["sla_violations"],
             #         get_norm(metadata=s, attr_name="trust_cost", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
             #         get_norm(metadata=s, attr_name="amount_of_uncached_layers", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
-            #         get_norm(metadata=s, attr_name="free_capacity", min=min_and_max["minimum"], max=min_and_max["maximum"]),
+            #         (1 - get_norm(metadata=s, attr_name="free_capacity", min=min_and_max["minimum"], max=min_and_max["maximum"])),
             #     ),
             # )
 
@@ -119,24 +127,24 @@ def trust_edge_v2(parameters: dict = {}):
                     break
 
 
-    # Exibindo métricas de confiabilidade
+    # Displaying reliability metrics
     #display_reliability_metrics(parameters=parameters)
 
-    # Exibindo métricas de simulação
+    # Displaying simulation metrics
     display_simulation_metrics(simulation_parameters=parameters)
 
-    # print(f"\n[LOG] Aplicações com requisições no step {current_step}:")
+    # print(f"\n[LOG] Applications with requests on step {current_step}:")
     # for app in apps_metadata:
-    #     print(f" - Aplicação {app['object'].id}: Delay Score={app['delay_score']}")
+    #     print(f" - Application {app['object'].id}: Delay Score={app['delay_score']}")
 
-    # print(f"\n[LOG] Usuários fazendo requisições no step {current_step}:")
+    # print(f"\n[LOG] Users making requests on step {current_step}:")
     # print(users_making_requests)
     # print("\n")
 
-    # Exibindo informações detalhadas das aplicações, seus servidores e usuários
+    # Displaying detailed information about applications, their servers and users
     #display_application_info()
 
-    # Registrar o estado atual de todas as entidades para diagnóstico
+    # Register the current state of all entities for diagnosis
     #print("[DEBUG] Chamando log_entities_state")
     #display_log_entities_state(parameters)
 
@@ -157,13 +165,13 @@ def get_server_total_failures(server):
 
 
 def get_server_mttr(server):
-    """Calcula o Mean Time To Repair (MTTR) do servidor.
+    """Calculates the Mean Time To Repair (MTTR) of the server.
     
     Args:
-        server (EdgeServer): O objeto servidor.
+        server (EdgeServer): The server object.
         
     Returns:
-        float: Tempo médio para reparo (MTTR) ou 0 se não houver falhas.
+        float: MTTR in timesteps.
     """
     history = server.failure_model.failure_history
     repair_times = []
@@ -174,7 +182,7 @@ def get_server_mttr(server):
 
 
 def get_server_downtime_history(server):
-    """Calcula o tempo total de inatividade do servidor considerando todo o histórico.
+    """Calculates the total server downtime considering the entire history.
     
     Args:
         server (EdgeServer): O objeto servidor.
@@ -185,7 +193,7 @@ def get_server_downtime_history(server):
     total_downtime = 0
     
     for failure_occurrence in server.failure_model.failure_history:
-        # Calcula o tempo de downtime para cada falha no histórico
+        # Calculate downtime for each failure in the history
         failure_start = failure_occurrence["failure_starts_at"]
         failure_end = failure_occurrence["becomes_available_at"]
         total_downtime += failure_end - failure_start
@@ -194,7 +202,7 @@ def get_server_downtime_history(server):
 
 
 def get_server_uptime_history(server):
-    """Calcula o tempo total de atividade do servidor considerando todo o histórico.
+    """Calculates the total server uptime considering the entire history.
     
     Args:
         server (EdgeServer): O objeto servidor.
@@ -202,11 +210,11 @@ def get_server_uptime_history(server):
     Returns:
         float: Tempo total de atividade (uptime) do servidor de todo o histórico.
     """
-    # Se não houver histórico de falhas, consideramos todo o tempo como uptime
+    # If there is no failure history, consider all time as uptime
     if not server.failure_model.failure_history:
-        return float("inf")  # Retorna infinito se nunca falhou
+        return float("inf")  # Return infinity if it never failed
     
-    # Calcula o tempo total desde o início do histórico até o momento atual, contando o 0.
+    # Calculate total time from the beginning of history to current moment, counting from 0.
     total_time_span = abs(getattr(server.failure_model, 'initial_failure_time_step') - (server.model.schedule.steps + 1)) + 1
     total_downtime = get_server_downtime_history(server=server)
 
@@ -216,7 +224,7 @@ def get_server_uptime_history(server):
 
 
 def get_server_downtime_simulation(server):
-    """Calcula o tempo total de inatividade do servidor durante a simulação.
+    """Calculates the total server downtime during the simulation.
     
     Args:
         server (EdgeServer): O objeto servidor.
@@ -240,7 +248,7 @@ def get_server_downtime_simulation(server):
 
 
 def get_server_uptime_simulation(server):
-    """Calcula o tempo total de atividade do servidor durante a simulação.
+    """Calculates the total server uptime during the simulation.
     
     Args:
         server (EdgeServer): O objeto servidor.
@@ -263,7 +271,7 @@ def get_server_uptime_simulation(server):
 
 
 def get_server_mtbf(server):
-    """Calcula o Mean Time Between Failures (MTBF) do servidor.
+    """Calculates the Mean Time Between Failures (MTBF) of the server.
     
     Args:
         server (EdgeServer): O objeto servidor.
@@ -274,13 +282,13 @@ def get_server_mtbf(server):
     number_of_failures = len(server.failure_model.failure_history)
     
     if number_of_failures == 0:
-        return float("inf")  # Retorna infinito se não houver falhas
+        return float("inf")  # Return infinity if there are no failures
         
     return get_server_uptime_history(server) / number_of_failures
 
 
 def get_server_failure_rate(server):
-    """Calcula a taxa de falha do servidor.
+    """Calculates the server failure rate.
     
     Args:
         server (EdgeServer): O objeto servidor.
@@ -293,7 +301,7 @@ def get_server_failure_rate(server):
 
 
 def get_server_conditional_reliability(server, upcoming_instants):
-    """Calcula a confiabilidade condicional do servidor para instantes futuros.
+    """Calculates the conditional reliability of the server for future moments.
     
     Args:
         server (EdgeServer): O objeto servidor.
@@ -305,20 +313,20 @@ def get_server_conditional_reliability(server, upcoming_instants):
     server_failure_rate = get_server_failure_rate(server)
     
     if server_failure_rate == 0:
-        return 1.0 * 100  # Confiabilidade máxima se não há taxa de falha
+        return 1.0 * 100  # Maximum reliability if there is no failure rate
         
-    # Usando math.exp para maior precisão nos cálculos exponenciais
+    # Using math.exp for greater precision in exponential calculations
     return (math.exp(-server_failure_rate * upcoming_instants)) * 100
 
 
 def get_application_downtime(application):
-    """Calcula o tempo de downtime da aplicação durante a simulação.
+    """Calculates the application downtime during the simulation.
     
     Args:
         application (Application): O objeto aplicação.
         
     Returns:
-        int: Número de timesteps onde a aplicação esteve indisponível.
+        int: Number of timesteps where the application was unavailable.
         
     Note:
        
@@ -334,13 +342,13 @@ def get_application_downtime(application):
 
 
 def get_application_uptime(application):
-    """Calcula o tempo de uptime da aplicação durante a simulação.
+    """Calculates the application uptime during the simulation.
     
     Args:
         application (Application): O objeto aplicação.
         
     Returns:
-        int: Número de timesteps onde a aplicação esteve disponível.
+        int: Number of timesteps where the application was available.
         
     Note:
         
@@ -356,18 +364,18 @@ def get_application_uptime(application):
 
 
 def get_user_perceived_downtime(application):
-    """Calcula o tempo de downtime percebido pelo usuário para uma aplicação específica.
+    """Calculates the downtime perceived by the user for a specific application.
     
     Args:
-        user (User): O objeto usuário.
-        application_id (str): O ID da aplicação.
+        user (User): The user object.
+        application_id (str): The application ID.
         
     Returns:
-        int: O número de timesteps onde o usuário percebeu downtime.
+        int: The number of timesteps where the user perceived downtime.
         
     Note:
-        O downtime percebido é baseado no histórico de downtime da aplicação.
-        Se o usuário não tiver histórico suficiente, retorna 0.
+        The perceived downtime is based on the application's downtime history.
+        If the user doesn't have sufficient history, returns 0.
     """
     
     perceived_downtime = sum(1 for status in application.downtime_history if status)
@@ -375,7 +383,7 @@ def get_user_perceived_downtime(application):
 
 
 def get_time_since_last_repair(server):
-    """Calcula o tempo desde o último reparo concluído do servidor.
+    """Calculates the time since the server's last completed repair.
     
     Realiza um cálculo preciso considerando:
     1. Se o servidor está atualmente em falha (retorna 0)
@@ -392,32 +400,32 @@ def get_time_since_last_repair(server):
     """
     # Verificar se o servidor tem histórico de falhas
     if not server.failure_model.failure_history:
-        return float("inf")  # Nunca falhou, então o tempo é "infinito"
+        return float("inf")  # Never failed, so the time is "infinite"
     
-    # Se o servidor está em falha (failing ou booting),
-    # retornar 0 imediatamente
+    # If the server is failing (failing or booting),
+    # return 0 immediately
     current_step = server.model.schedule.steps
     if is_ongoing_failure(server, current_step):
         return 0
     
     else:
     
-        # Ordenar o histórico pelo momento de reparo (becomes_available_at) do mais recente para o mais antigo
+        # Sort the history by repair time (becomes_available_at) from most recent to oldest
         sorted_history = sorted(
             server.failure_model.failure_history, 
             key=lambda x: x["becomes_available_at"], 
             reverse=True
         )
         
-        # Encontrar o reparo mais recente que ocorreu antes do tempo atual
+        # Find the most recent repair that occurred before the current time
         last_repair = None
         for failure in sorted_history:
-            # Considerar apenas reparos concluídos antes do tempo atual
+            # Consider only repairs completed before the current time
             if failure["becomes_available_at"] <= current_step:
                 last_repair = failure
                 break
         
-        # Calcular o tempo desde o último reparo e garantir que seja não-negativo
+        # Calculate time since last repair and ensure it is non-negative
         time_since_repair = current_step + 1 - last_repair["becomes_available_at"]
         return time_since_repair
 
@@ -456,27 +464,27 @@ def get_application_delay_score(app: object) -> float:
 
 
 def get_application_access_intensity_score(app: object) -> float:
-    """Calcula o score de intensidade de acesso da aplicação baseado no padrão de acesso do usuário.
+    """Calculates the application access intensity score based on the user's access pattern.
     
-    Aplicações com maior duração de acesso e menores intervalos têm maior prioridade.
+    Applications with longer access duration and shorter intervals have higher priority.
     
     Args:
         app (object): Application object.
         
     Returns:
-        float: Score de intensidade de acesso (maior = mais prioritário).
+        float: Access intensity score (higher = more priority).
     """
     user = app.users[0]
     
-    # Buscar o padrão de acesso para esta aplicação
+    # Find the access pattern for this application
     access_pattern = user.access_patterns[str(app.id)]
     
-    # Obter valores de duração e intervalo (usar o primeiro valor da lista)
-    duration = access_pattern.duration_values[0] if access_pattern.duration_values else 1
-    interval = access_pattern.interval_values[0] if access_pattern.interval_values else 1
+    # Get duration and interval values (use the first value from the list)
+    duration = access_pattern.duration_values[0]
+    interval = access_pattern.interval_values[0]
     
-    # Calcular score: quanto maior a duração e menor o intervalo, maior o score
-    # Usar log para suavizar diferenças extremas
+    # Calculate score: the longer the duration and shorter the interval, the higher the score
+    # Use log to smooth extreme differences
     import math
     
     # Fórmula: duration / interval * fator de normalização
@@ -553,6 +561,11 @@ def get_host_candidates(user: object, service: object) -> list:
         # Gathering the edge server's trust cost
         trust_cost_edge_server = get_server_trust_cost(edge_server)
 
+        # Gathering the edge server's reliability to execute the application without failing
+        user_access_patterns = user.access_patterns[str(service.application.id)]
+        service_expected_duration = user_access_patterns.duration_values[0]
+        conditional_reliability = get_server_conditional_reliability(edge_server, upcoming_instants=service_expected_duration)
+
         # Gathering the edge server's power consumption cost based on its CPU usage
         static_power_consumption = edge_server.power_model_parameters["static_power_percentage"]
         consumption_per_core = edge_server.power_model_parameters["max_power_consumption"] / edge_server.cpu
@@ -579,6 +592,7 @@ def get_host_candidates(user: object, service: object) -> list:
                 "object": edge_server,
                 "sla_violations": sla_violations,
                 "trust_cost": trust_cost_edge_server,
+                "conditional_reliability": conditional_reliability,
                 "power_consumption": power_consumption,
                 "overall_delay": overall_delay,
                 "amount_of_uncached_layers": amount_of_uncached_layers,
@@ -599,7 +613,7 @@ def is_ongoing_failure(server, current_step=None):
                                     Se não fornecido, será calculado baseado no step atual.
     
     Returns:
-        bool: True se houver uma falha em andamento, False caso contrário.
+        bool: True if there is an ongoing failure, False otherwise.
     """
     # Se o tempo não foi fornecido, calcular baseado no step atual
     if current_step is None:
@@ -698,8 +712,8 @@ def display_log_entities_state(parameters: dict = {}):
             uptime_info = f"Uptime={uptime}"
             downtime_info = f"Downtime={downtime}"
             # else:
-            #     uptime_info = "Histórico: vazio"
-            #     downtime_info = "não disponível"
+            #     uptime_info = "History: empty"
+            #     downtime_info = "not available"
             
             print(f"Aplicação {application.id}: Status={availability_status}, {uptime_info}, {downtime_info}")
     
@@ -711,7 +725,7 @@ def display_log_entities_state(parameters: dict = {}):
         traceback.print_exc()
 
 
-def display_simulation_metrics(simulation_parameters: dict):
+def display_simulation_metrics(simulation_parameters):
     """
     Exibe métricas detalhadas da simulação.
     
@@ -727,7 +741,8 @@ def display_simulation_metrics(simulation_parameters: dict):
     server_metrics = {}
     for server in EdgeServer.all():
         # Métricas históricas (sempre calculadas, baseadas em dados pré-simulação)
-        reliability = get_server_conditional_reliability(server, upcoming_instants=1)
+        reliability_10 = get_server_conditional_reliability(server, upcoming_instants=10)
+        reliability_60 = get_server_conditional_reliability(server, upcoming_instants=60)
         trust_cost = get_server_trust_cost(server)
         time_since_repair = get_time_since_last_repair(server)
 
@@ -746,7 +761,8 @@ def display_simulation_metrics(simulation_parameters: dict):
             "MTBF": get_server_mtbf(server),
             "MTTR": get_server_mttr(server),
             "Failure Rate": get_server_failure_rate(server),
-            "Reliability": reliability,
+            "Reliability_10": reliability_10,
+            "Reliability_60": reliability_60,
             "Time Since Last Repair": time_since_repair,
             "Total Failures": get_server_total_failures(server)
         }
@@ -764,12 +780,15 @@ def display_simulation_metrics(simulation_parameters: dict):
     
     # Métricas detalhadas de usuários
     user_metrics = {}
+    total_perceived_downtime = 0
     for user in User.all():
         user_entry = {}
         for application in user.applications:
             perceived_downtime = get_user_perceived_downtime(application)
             user_entry[f"Application {application.id} Perceived Downtime"] = perceived_downtime
+            total_perceived_downtime += perceived_downtime
         user_metrics[f"User {user.id}"] = user_entry
+        
 
     metrics = {
         "Simulation Parameters": simulation_parameters,
@@ -780,7 +799,7 @@ def display_simulation_metrics(simulation_parameters: dict):
     }
     
     print(dumps(metrics, indent=4))
-
+    print(f"Total Perceived Downtime: {total_perceived_downtime}")
 
 def display_reliability_metrics(parameters: dict = {}):
     """Exibe um resumo das métricas de confiabilidade de todos os servidores.
@@ -838,7 +857,7 @@ def display_reliability_metrics(parameters: dict = {}):
             mtbf_str = f"{mtbf:.2f}"
             
         if time_since_repair == float("inf"):
-            time_repair_str = "Nunca"
+            time_repair_str = "Never"
         else:
             time_repair_str = f"{time_since_repair:.2f}"
 
@@ -852,13 +871,13 @@ def display_reliability_metrics(parameters: dict = {}):
 
 
 def display_application_info():
-    """Exibe informações sobre as aplicações, seus servidores de alocação e usuários.
-    Esta função mostra a cada passo da simulação onde cada aplicação está alocada
-    e quais usuários estão acessando cada aplicação.
+    """Displays information about applications, their allocation servers and users.
+    This function shows at each simulation step where each application is allocated
+    and which users are accessing each application.
     """
     print("\n\n")
     print("==========================================================================")
-    print("================= INFORMAÇÕES DE APLICAÇÕES E SERVIDORES =================")
+    print("================= APPLICATION AND SERVER INFORMATION =================")
     print("==========================================================================")
     
     print(f"{'Aplicação ID':^12}|{'Servidor ID':^12}|{'Usuário ID':^12}|{'Status':^10}")
@@ -873,12 +892,12 @@ def display_application_info():
         users = application.users
         
         if users:
-            # Se houver usuários, mostramos uma linha para cada usuário
+            # If there are users, show a line for each user
             for user in users:
                 status = "Online" if application.availability_status else "Offline"
                 print(f"{application.id:^12}|{server_id:^12}|{user.id:^12}|{status:^10}")
         else:
-            # Se não houver usuários, mostramos apenas a aplicação e o servidor
+            # If there are no users, show only the application and server
             status = "Online" if application.availability_status else "Offline"
             print(f"{application.id:^12}|{server_id:^12}|{'N/A':^12}|{status:^10}")
 

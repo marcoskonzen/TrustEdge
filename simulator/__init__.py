@@ -4,6 +4,7 @@ from .helper_functions import (
     min_max_norm,
     find_minimum_and_maximum,
     get_norm,
+    normalize_cpu_and_memory,
     get_normalized_capacity,
     get_normalized_free_capacity,
     get_normalized_demand,
@@ -15,7 +16,9 @@ from .helper_functions import (
     find_shortest_path,
     sign,
     provision,
-    reset_server
+    reset_server,
+    user_set_communication_path,
+    topology_collect
 )
 
 __all__ = [
@@ -24,6 +27,7 @@ __all__ = [
     "min_max_norm",
     "find_minimum_and_maximum",
     "get_norm",
+    "normalize_cpu_and_memory",
     "get_normalized_capacity",
     "get_normalized_free_capacity",
     "get_normalized_demand",
@@ -36,4 +40,6 @@ __all__ = [
     "sign",
     "provision",
     "reset_server",
+    "user_set_communication_path",
+    "topology_collect",
 ]

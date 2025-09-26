@@ -11,6 +11,11 @@ import math  # Adicionado para cálculos matemáticos mais precisos
 # Importing EdgeSimPy components
 from edge_sim_py import *
 
+# Importing EdgeSimPy extensions
+from simulator.extensions import *
+
+#from simulator.algorithms.trust_edge_v2 import get_user_perceived_downtime
+
 
 def display_topology(topology: object, output_filename: str = "topology"):
     """Prints the network topology to an output file.
@@ -157,6 +162,20 @@ def get_norm(metadata: dict, attr_name: str, min: dict, max: dict) -> float:
         normalized_value (float): Normalized value.
     """
     normalized_value = min_max_norm(x=metadata[attr_name], minimum=min[attr_name], maximum=max[attr_name])
+    return normalized_value
+
+
+def normalize_cpu_and_memory(cpu, memory) -> float:
+    """Normalizes the CPU and memory values.
+
+    Args:
+        cpu (float): CPU value.
+        memory (float): Memory value.
+
+    Returns:
+        normalized_value (float): Normalized value.
+    """
+    normalized_value = (cpu * memory) ** (1 / 2)
     return normalized_value
 
 
@@ -531,6 +550,7 @@ def sign(value: int):
         return -1
     return 0
 
+
 def provision(user: object, application: object, service: object, edge_server: object):
     """Provisions an application's service on an edge server.
 
@@ -590,3 +610,201 @@ def reset_server(edge_server: object):
         for app in user.applications:
             user.delays[str(app.id)] = 0
             user.communication_paths[str(app.id)] = []
+
+
+def user_set_communication_path(self, app: object, communication_path: list = []) -> list:
+    """Updates the set of links used during the communication of user and its application.
+
+    Args:
+        app (object): User application.
+        communication_path (list, optional): User-specified communication path. Defaults to [].
+
+    Returns:
+        communication_path (list): Updated communication path.
+    """
+    topology = Topology.first()
+
+    # Releasing links used in the past to connect the user with its application
+    if app in self.communication_paths:
+        path = [[NetworkSwitch.find_by_id(i) for i in p] for p in self.communication_paths[str(app.id)]]
+        topology._release_communication_path(communication_path=path, app=app)
+
+    # Defining communication path
+    if len(communication_path) > 0:
+        self.communication_paths[str(app.id)] = communication_path
+    else:
+        self.communication_paths[str(app.id)] = []
+
+        service_hosts_base_stations = [service.server.base_station for service in app.services if service.server]
+        communication_chain = [self.base_station] + service_hosts_base_stations
+
+        # Defining a set of links to connect the items in the application's service chain
+        for i in range(len(communication_chain) - 1):
+
+            # Defining origin and target nodes
+            origin = communication_chain[i]
+            target = communication_chain[i + 1]
+
+            # Finding and storing the best communication path between the origin and target nodes
+            if origin == target:
+                path = []
+            else:
+                path = find_shortest_path(origin_network_switch=origin.network_switch, target_network_switch=target.network_switch)
+
+            # Adding the best path found to the communication path
+            self.communication_paths[str(app.id)].append([network_switch.id for network_switch in path])
+
+            # Computing the new demand of chosen links
+            path = [[NetworkSwitch.find_by_id(i) for i in p] for p in self.communication_paths[str(app.id)]]
+            topology._allocate_communication_path(communication_path=path, app=app)
+
+    # Computing application's delay
+    self._compute_delay(app=app, metric="latency")
+
+    communication_path = self.communication_paths[str(app.id)]
+    return communication_path
+
+
+def topology_collect(self) -> dict:
+    """Method that collects a set of metrics for the object.
+
+    The network topology aggregates the following metrics from the simulation:
+        1. Infrastructure Usage
+            - Overall Occupation
+            - Occupation per Infrastructure Provider
+            - Occupation per Server Model
+            - Active Servers per Infrastructure Provider
+            - Active Servers per Model
+            - Power Consumption
+                - Overall Power Consumption
+                - Power Consumption per Server Model
+        2. SLA Violations
+            - Number of Delay SLA Violations
+            - Number of Privacy SLA Violations
+            - Number of Delay SLA Violations per Application Chain Size
+            - Privacy Violations per Application Delay SLA
+            - Privacy Violations per Service Privacy Requirement
+
+    Returns:
+        metrics (dict): Object metrics.
+    """
+    # Declaring infrastructure metrics
+    overloaded_edge_servers = 0
+    overall_occupation = 0
+    occupation_per_model = {}
+    overall_power_consumption = 0
+    power_consumption_per_server_model = {}
+    active_servers_per_model = {}
+
+    # Declaring delay SLA metrics
+    delay_sla_violations = 0
+    delay_violations_per_delay_sla = {}
+    
+
+    # Declaring availability metrics
+    user_total_perceived_downtime = 0
+    total_perceived_downtime_per_access_pattern = {}
+    delay_violations_per_access_pattern = {}
+
+    # Collecting infrastructure metrics
+    for edge_server in EdgeServer.all():
+        # Overall Occupation
+        capacity = normalize_cpu_and_memory(cpu=edge_server.cpu, memory=edge_server.memory)
+        demand = normalize_cpu_and_memory(cpu=edge_server.cpu_demand, memory=edge_server.memory_demand)
+        overall_occupation += demand / capacity * 100
+        overall_power_consumption += edge_server.get_power_consumption()
+
+        # Number of overloaded edge servers
+        free_cpu = edge_server.cpu - edge_server.cpu_demand
+        free_memory = edge_server.memory - edge_server.memory_demand
+        free_disk = edge_server.disk - edge_server.disk_demand
+        if free_cpu < 0 or free_memory < 0 or free_disk < 0:
+            overloaded_edge_servers += 1
+
+        # Occupation per Server Model
+        if edge_server.model_name not in occupation_per_model.keys():
+            occupation_per_model[edge_server.model_name] = []
+        occupation_per_model[edge_server.model_name].append(demand / capacity * 100)
+
+        # Power consumption per Server Model
+        if edge_server.model_name not in power_consumption_per_server_model.keys():
+            power_consumption_per_server_model[edge_server.model_name] = []
+        power_consumption_per_server_model[edge_server.model_name].append(edge_server.get_power_consumption())
+
+    # Aggregating overall metrics
+    overall_occupation = overall_occupation / EdgeServer.count()
+
+    for model_name in occupation_per_model.keys():
+        active_servers_per_model[model_name] = len([item for item in occupation_per_model[model_name] if item > 0])
+        occupation_per_model[model_name] = sum(occupation_per_model[model_name]) / len(occupation_per_model[model_name])
+
+    # Collecting delay SLA metrics
+    for user in User.all():
+        for app in user.applications:
+            user.set_communication_path(app=app)
+            delay_sla = user.delay_slas[str(app.id)]
+            delay = user._compute_delay(app=app, metric="latency")
+
+            access_pattern = user.access_patterns[str(app.id)]
+            duration = access_pattern.duration_values[0]
+            
+            # Calculating the number of delay SLA violations
+            if delay > delay_sla:
+                delay_sla_violations += 1
+
+                if delay_sla not in delay_violations_per_delay_sla.keys():
+                    delay_violations_per_delay_sla[delay_sla] = 0
+                delay_violations_per_delay_sla[delay_sla] += 1
+
+                if duration not in delay_violations_per_access_pattern.keys():
+                    delay_violations_per_access_pattern[duration] = 0
+                delay_violations_per_access_pattern[duration] += 1
+
+    data = {}
+    data["model"] = []
+    for model_name in set([server.model_name for server in EdgeServer.all()]):
+        data["model"].append(
+            {
+                "model_name": model_name,
+                "occupation": occupation_per_model[model_name],
+                "power_consumption": sum(power_consumption_per_server_model[model_name]),
+                "active_servers": active_servers_per_model[model_name],
+            }
+        )
+
+    data["delay_sla"] = []
+    for delay_sla in set([user.delay_slas[str(app.id)] for user in User.all() for app in user.applications]):
+        data["delay_sla"].append(
+            {
+                "delay_sla": delay_sla,
+                "delay_sla_violations": delay_violations_per_delay_sla.get(delay_sla, None),
+            }
+        )
+    # Collecting availability metrics
+    for user in User.all():
+        for app in user.applications:
+            perceived_downtime = sum(1 for status in app.downtime_history if status)
+            user_total_perceived_downtime += perceived_downtime
+
+            access_pattern = user.access_patterns[str(app.id)]
+            duration = access_pattern.duration_values[0]
+
+            if duration not in total_perceived_downtime_per_access_pattern.keys():
+                total_perceived_downtime_per_access_pattern[duration] = 0
+            total_perceived_downtime_per_access_pattern[duration] += perceived_downtime
+
+    metrics = {
+        "overloaded_edge_servers": overloaded_edge_servers,
+        "overall_occupation": overall_occupation,
+        "occupation_per_model": occupation_per_model,
+        "overall_power_consumption": overall_power_consumption,
+        "power_consumption_per_server_model": power_consumption_per_server_model,
+        "active_servers_per_model": active_servers_per_model,
+        "delay_violations_per_delay_sla": delay_violations_per_delay_sla,
+        "delay_violations_per_access_pattern": delay_violations_per_access_pattern,
+        "user_total_perceived_downtime": user_total_perceived_downtime,
+        "total_perceived_downtime_per_access_pattern": total_perceived_downtime_per_access_pattern,
+        "raw_data": data,
+    }
+
+    return metrics

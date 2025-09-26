@@ -52,6 +52,9 @@ def main(parameters: dict):
             parameters_string += f"{key}={value}{parameter_divisor}"
     simulator.output_file_name = parameters_string
 
+    User.set_communication_path = user_set_communication_path
+    Topology.collect = topology_collect
+
     # Initializing the simulated scenario
     simulator.initialize(input_file=parameters["dataset"])
 
@@ -66,6 +69,11 @@ def main(parameters: dict):
 
     # Finishing the simulation's execution time counter
     final_time = time.time()
+
+    metrics = Topology.first().collect()
+    print(f"==== {parameters['algorithm']} ====")
+    for metric, value in metrics.items():
+        print(f"{metric}: {value}")
 
 if __name__ == "__main__":
     # Parsing named arguments from the command line
