@@ -14,7 +14,168 @@ from edge_sim_py import *
 # Importing EdgeSimPy extensions
 from simulator.extensions import *
 
-#from simulator.algorithms.trust_edge_v2 import get_user_perceived_downtime
+class SimulationMetrics:
+    """Class that encapsulates a set of metrics collected during the simulation execution."""
+    
+    def __init__(self):
+        self.reset_all()
+    
+    def reset_all(self):
+        """Resets all metrics to their initial state."""
+        # SLA metrics
+        self.sla_violations = 0
+        self.delay_violations_per_delay_sla = {}
+        self.delay_violations_per_access_pattern = {}
+
+        # Infraestructure usage metrics
+        self.total_overloaded_servers = 0
+        self.total_occupation_steps = 0.0
+        self.occupation_samples_per_model = {}
+        self.total_power_consumption = 0.0
+        self.power_samples_per_model = {}
+        self.active_servers_per_model = {}
+        self.simulation_steps = 0
+        self.total_servers_per_model = {}
+        self.available_occupation_steps = 0.0
+        self.available_occupation_samples_per_model = {}
+
+    def add_sla_violations(self, user_violations):
+        """Adds SLA violations collected in the current step to the overall SLA violations.
+
+        Args:
+            user_violations (dict): Dictionary that contains the SLA violations collected in the current step.
+        """
+        # Acumular violações totais
+        self.sla_violations += user_violations['delay_sla_violations']
+        
+        # Acumular violações por delay SLA
+        for delay_sla, violations in user_violations['delay_violations_per_delay_sla'].items():
+            self.delay_violations_per_delay_sla[delay_sla] = (
+                self.delay_violations_per_delay_sla.get(delay_sla, 0) + violations
+            )
+        
+        # Acumular violações por padrão de acesso
+        for duration, violations in user_violations['delay_violations_per_access_pattern'].items():
+            self.delay_violations_per_access_pattern[duration] = (
+                self.delay_violations_per_access_pattern.get(duration, 0) + violations
+            )
+
+    def add_infrastructure_metrics(self, step_metrics):
+        """Adiciona métricas de infraestrutura de um step às métricas globais."""
+        # Incrementar contador de steps
+        self.simulation_steps += 1
+
+        # Armazenar o total de servidores por modelo
+        if not self.total_servers_per_model:
+            self.total_servers_per_model = step_metrics['total_servers_per_model'].copy()
+        
+        # Acumular servidores sobrecarregados
+        self.total_overloaded_servers += step_metrics['overloaded_edge_servers']
+        
+        # Acumular ocupação geral
+        self.total_occupation_steps += step_metrics['overall_occupation']
+
+        # Acumular ocupação disponível
+        self.available_occupation_steps += step_metrics['available_overall_occupation']
+
+        # Acumular consumo de energia total
+        self.total_power_consumption += step_metrics['overall_power_consumption']
+        
+        # Acumular ocupação por modelo
+        for model_name, occupation in step_metrics['occupation_per_model'].items():
+            if model_name not in self.occupation_samples_per_model:
+                self.occupation_samples_per_model[model_name] = []
+            self.occupation_samples_per_model[model_name].append(occupation)
+
+        #Acumular ocupação por modelo (apenas servidores disponíveis)
+        for model_name, occupation in step_metrics['available_occupation_per_model'].items():
+            if model_name not in self.available_occupation_samples_per_model:
+                self.available_occupation_samples_per_model[model_name] = []
+            self.available_occupation_samples_per_model[model_name].append(occupation)
+        
+        # Acumular consumo por modelo
+        for model_name, power_list in step_metrics['power_consumption_per_server_model'].items():
+            if model_name not in self.power_samples_per_model:
+                self.power_samples_per_model[model_name] = []
+            self.power_samples_per_model[model_name].extend(power_list)
+        
+        # Acumular servidores ativos por modelo
+        for model_name, active_count in step_metrics['active_servers_per_model'].items():
+            if model_name not in self.active_servers_per_model:
+                self.active_servers_per_model[model_name] = set()
+            
+            # Adicionar os IDs dos servidores ativos deste step
+            for edge_server in EdgeServer.all():
+                if (edge_server.model_name == model_name and 
+                    edge_server.status == "available" and
+                    (edge_server.cpu_demand > 0 or edge_server.memory_demand > 0 or edge_server.disk_demand > 0)):
+                    self.active_servers_per_model[model_name].add(edge_server.id)
+    
+    def get_consolidated_metrics(self):
+        """Retorna as métricas consolidadas da simulação."""
+        # Calcular médias e totais
+        avg_overall_occupation = (
+            self.total_occupation_steps / self.simulation_steps 
+            if self.simulation_steps > 0 else 0
+        )
+        
+        # Calcular ocupação média geral apenas dos servidores disponíveis
+        avg_available_overall_occupation = (
+            self.available_occupation_steps / self.simulation_steps 
+            if self.simulation_steps > 0 else 0
+        )
+
+        # Calcular ocupação média por modelo
+        avg_occupation_per_model = {}
+        for model_name, samples in self.occupation_samples_per_model.items():
+            avg_occupation_per_model[model_name] = sum(samples) / len(samples) if samples else 0
+        
+        # Calcular consumo de energia total por modelo
+        total_power_per_model = {}
+        for model_name, samples in self.power_samples_per_model.items():
+            total_power_per_model[model_name] = sum(samples)
+
+        #Calcular ocupação média por modelo (apenas servidores disponíveis)
+        avg_available_occupation_per_model = {}
+        for model_name, samples in self.available_occupation_samples_per_model.items():
+            avg_available_occupation_per_model[model_name] = sum(samples) / len(samples) if samples else 0
+        
+        # Converter sets de servidores ativos para contagens
+        active_servers_count_per_model = {}
+        for model_name, server_set in self.active_servers_per_model.items():
+            active_servers_count_per_model[model_name] = len(server_set)
+        
+        return {
+            # SLA metrics
+            "total_sla_violations": self.sla_violations,
+            "delay_violations_per_delay_sla": dict(self.delay_violations_per_delay_sla),
+            "delay_violations_per_access_pattern": dict(self.delay_violations_per_access_pattern),
+            
+            # Infrastructure metrics
+            "total_servers_per_model": dict(self.total_servers_per_model),
+            "total_overloaded_servers": self.total_overloaded_servers,
+            "average_overall_occupation": avg_overall_occupation,
+            "average_occupation_per_model": avg_occupation_per_model,
+            "average_available_overall_occupation": avg_available_overall_occupation,
+            "average_available_occupation_per_model": avg_available_occupation_per_model,
+            "total_power_consumption": self.total_power_consumption,
+            "total_power_consumption_per_model": total_power_per_model,
+            "total_simulation_steps": self.simulation_steps,
+            
+        }
+
+
+_simulation_metrics = SimulationMetrics()
+
+
+def get_simulation_metrics():
+    """Retorna a instância das métricas de simulação."""
+    return _simulation_metrics
+
+
+def reset_all_counters():
+    """Reseta todos os contadores globais."""
+    _simulation_metrics.reset_all()
 
 
 def display_topology(topology: object, output_filename: str = "topology"):
@@ -665,29 +826,44 @@ def user_set_communication_path(self, app: object, communication_path: list = []
     return communication_path
 
 
-def topology_collect(self) -> dict:
-    """Method that collects a set of metrics for the object.
+def get_sla_violations(user) -> dict:
+    """Method that collects a set of SLA violation metrics for a given user."""
+    
+    delay_sla_violations = 0
+    delay_violations_per_delay_sla = {}
+    delay_violations_per_access_pattern = {}
+    
+    # Collecting delay SLA metrics
+    for app in user.applications:
+        user.set_communication_path(app=app)
+        delay_sla = user.delay_slas[str(app.id)]
+        delay = user._compute_delay(app=app, metric="latency")
 
-    The network topology aggregates the following metrics from the simulation:
-        1. Infrastructure Usage
-            - Overall Occupation
-            - Occupation per Infrastructure Provider
-            - Occupation per Server Model
-            - Active Servers per Infrastructure Provider
-            - Active Servers per Model
-            - Power Consumption
-                - Overall Power Consumption
-                - Power Consumption per Server Model
-        2. SLA Violations
-            - Number of Delay SLA Violations
-            - Number of Privacy SLA Violations
-            - Number of Delay SLA Violations per Application Chain Size
-            - Privacy Violations per Application Delay SLA
-            - Privacy Violations per Service Privacy Requirement
+        access_pattern = user.access_patterns[str(app.id)]
+        duration = access_pattern.duration_values[0]
+        
+        # Calculating the number of delay SLA violations
+        if delay > delay_sla:
+            delay_sla_violations += 1
+            
+            if delay_sla not in delay_violations_per_delay_sla:
+                delay_violations_per_delay_sla[delay_sla] = 0
+            delay_violations_per_delay_sla[delay_sla] += 1
+            
+            if duration not in delay_violations_per_access_pattern:
+                delay_violations_per_access_pattern[duration] = 0
+            delay_violations_per_access_pattern[duration] += 1
 
-    Returns:
-        metrics (dict): Object metrics.
-    """
+    return {
+        'delay_sla_violations': delay_sla_violations,
+        'delay_violations_per_delay_sla': delay_violations_per_delay_sla,
+        'delay_violations_per_access_pattern': delay_violations_per_access_pattern
+    }
+
+
+def get_infrastructure_usage_metrics() -> dict:
+    """Method that collects a set of infrastructure metrics."""
+    
     # Declaring infrastructure metrics
     overloaded_edge_servers = 0
     overall_occupation = 0
@@ -695,103 +871,87 @@ def topology_collect(self) -> dict:
     overall_power_consumption = 0
     power_consumption_per_server_model = {}
     active_servers_per_model = {}
+    total_servers_per_model = {}
+    available_overall_occupation = 0
+    available_occupation_per_model = {}
+    available_servers_per_model = {}
 
-    # Declaring delay SLA metrics
-    delay_sla_violations = 0
-    delay_violations_per_delay_sla = {}
-    
+    # Counter total servers per model
+    for edge_server in EdgeServer.all():
+        if edge_server.model_name not in total_servers_per_model:
+            total_servers_per_model[edge_server.model_name] = 0
+        total_servers_per_model[edge_server.model_name] += 1
+        
+        if edge_server.model_name not in occupation_per_model:
+            occupation_per_model[edge_server.model_name] = 0
 
-    # Declaring availability metrics
-    user_total_perceived_downtime = 0
-    total_perceived_downtime_per_access_pattern = {}
-    delay_violations_per_access_pattern = {}
+        # Inicializar ocupação para servidores disponíveis
+        if edge_server.model_name not in available_occupation_per_model:
+            available_occupation_per_model[edge_server.model_name] = 0
+        
+        # Contar servidores disponíveis por modelo
+        if edge_server.status == "available":
+            if edge_server.model_name not in available_servers_per_model:
+                available_servers_per_model[edge_server.model_name] = 0
+            available_servers_per_model[edge_server.model_name] += 1
 
     # Collecting infrastructure metrics
     for edge_server in EdgeServer.all():
-        # Overall Occupation
-        capacity = normalize_cpu_and_memory(cpu=edge_server.cpu, memory=edge_server.memory)
-        demand = normalize_cpu_and_memory(cpu=edge_server.cpu_demand, memory=edge_server.memory_demand)
-        overall_occupation += demand / capacity * 100
-        overall_power_consumption += edge_server.get_power_consumption()
+        if edge_server.status == "available":
+        
+            # Overall Occupation
+            capacity = normalize_cpu_and_memory(cpu=edge_server.cpu, memory=edge_server.memory)
+            demand = normalize_cpu_and_memory(cpu=edge_server.cpu_demand, memory=edge_server.memory_demand)
+            server_occupation = demand / capacity * 100
+            overall_occupation += server_occupation
+            available_overall_occupation += server_occupation
+            overall_power_consumption += edge_server.get_power_consumption()
 
-        # Number of overloaded edge servers
-        free_cpu = edge_server.cpu - edge_server.cpu_demand
-        free_memory = edge_server.memory - edge_server.memory_demand
-        free_disk = edge_server.disk - edge_server.disk_demand
-        if free_cpu < 0 or free_memory < 0 or free_disk < 0:
-            overloaded_edge_servers += 1
+            # Number of overloaded edge servers
+            free_cpu = edge_server.cpu - edge_server.cpu_demand
+            free_memory = edge_server.memory - edge_server.memory_demand
+            free_disk = edge_server.disk - edge_server.disk_demand
+            if free_cpu < 0 or free_memory < 0 or free_disk < 0:
+                overloaded_edge_servers += 1
 
-        # Occupation per Server Model
-        if edge_server.model_name not in occupation_per_model.keys():
-            occupation_per_model[edge_server.model_name] = []
-        occupation_per_model[edge_server.model_name].append(demand / capacity * 100)
+            # Occupation per Server Model
+            occupation_per_model[edge_server.model_name] += server_occupation
+            available_occupation_per_model[edge_server.model_name] += server_occupation
 
-        # Power consumption per Server Model
-        if edge_server.model_name not in power_consumption_per_server_model.keys():
-            power_consumption_per_server_model[edge_server.model_name] = []
-        power_consumption_per_server_model[edge_server.model_name].append(edge_server.get_power_consumption())
+            # Power consumption per Server Model
+            if edge_server.model_name not in power_consumption_per_server_model.keys():
+                power_consumption_per_server_model[edge_server.model_name] = []
+            power_consumption_per_server_model[edge_server.model_name].append(edge_server.get_power_consumption())
 
-    # Aggregating overall metrics
-    overall_occupation = overall_occupation / EdgeServer.count()
+            # Active servers per model (servers with any demand > 0)
+            if edge_server.cpu_demand > 0 or edge_server.memory_demand > 0 or edge_server.disk_demand > 0:
+                if edge_server.model_name not in active_servers_per_model:
+                    active_servers_per_model[edge_server.model_name] = set()
+                active_servers_per_model[edge_server.model_name].add(edge_server.id)
 
+    # Aggregating overall metrics for this step
+    overall_occupation = overall_occupation / EdgeServer.count() if EdgeServer.count() > 0 else 0
+
+    available_edge_servers = sum(1 for s in EdgeServer.all() if s.status == "available")
+    available_overall_occupation = available_overall_occupation / available_edge_servers if available_edge_servers > 0 else 0
+
+
+    # Convert occupation per model to averages for this step
     for model_name in occupation_per_model.keys():
-        active_servers_per_model[model_name] = len([item for item in occupation_per_model[model_name] if item > 0])
-        occupation_per_model[model_name] = sum(occupation_per_model[model_name]) / len(occupation_per_model[model_name])
+        total_servers = total_servers_per_model[model_name]
+        occupation_per_model[model_name] = occupation_per_model[model_name] / total_servers if total_servers > 0 else 0
 
-    # Collecting delay SLA metrics
-    for user in User.all():
-        for app in user.applications:
-            user.set_communication_path(app=app)
-            delay_sla = user.delay_slas[str(app.id)]
-            delay = user._compute_delay(app=app, metric="latency")
-
-            access_pattern = user.access_patterns[str(app.id)]
-            duration = access_pattern.duration_values[0]
-            
-            # Calculating the number of delay SLA violations
-            if delay > delay_sla:
-                delay_sla_violations += 1
-
-                if delay_sla not in delay_violations_per_delay_sla.keys():
-                    delay_violations_per_delay_sla[delay_sla] = 0
-                delay_violations_per_delay_sla[delay_sla] += 1
-
-                if duration not in delay_violations_per_access_pattern.keys():
-                    delay_violations_per_access_pattern[duration] = 0
-                delay_violations_per_access_pattern[duration] += 1
-
-    data = {}
-    data["model"] = []
-    for model_name in set([server.model_name for server in EdgeServer.all()]):
-        data["model"].append(
-            {
-                "model_name": model_name,
-                "occupation": occupation_per_model[model_name],
-                "power_consumption": sum(power_consumption_per_server_model[model_name]),
-                "active_servers": active_servers_per_model[model_name],
-            }
+    #Convert occupation per model to averages (apenas servidores disponíveis)
+    for model_name in available_occupation_per_model.keys():
+        available_servers = available_servers_per_model.get(model_name, 0)
+        available_occupation_per_model[model_name] = (
+            available_occupation_per_model[model_name] / available_servers 
+            if available_servers > 0 else 0
         )
 
-    data["delay_sla"] = []
-    for delay_sla in set([user.delay_slas[str(app.id)] for user in User.all() for app in user.applications]):
-        data["delay_sla"].append(
-            {
-                "delay_sla": delay_sla,
-                "delay_sla_violations": delay_violations_per_delay_sla.get(delay_sla, None),
-            }
-        )
-    # Collecting availability metrics
-    for user in User.all():
-        for app in user.applications:
-            perceived_downtime = sum(1 for status in app.downtime_history if status)
-            user_total_perceived_downtime += perceived_downtime
-
-            access_pattern = user.access_patterns[str(app.id)]
-            duration = access_pattern.duration_values[0]
-
-            if duration not in total_perceived_downtime_per_access_pattern.keys():
-                total_perceived_downtime_per_access_pattern[duration] = 0
-            total_perceived_downtime_per_access_pattern[duration] += perceived_downtime
+    # Convert active servers sets to counts
+    for model_name in active_servers_per_model.keys():
+        active_servers_per_model[model_name] = len(active_servers_per_model[model_name])
 
     metrics = {
         "overloaded_edge_servers": overloaded_edge_servers,
@@ -800,11 +960,80 @@ def topology_collect(self) -> dict:
         "overall_power_consumption": overall_power_consumption,
         "power_consumption_per_server_model": power_consumption_per_server_model,
         "active_servers_per_model": active_servers_per_model,
-        "delay_violations_per_delay_sla": delay_violations_per_delay_sla,
-        "delay_violations_per_access_pattern": delay_violations_per_access_pattern,
+        "total_servers_per_model": total_servers_per_model,
+        "available_overall_occupation": available_overall_occupation,
+        "available_occupation_per_model": available_occupation_per_model,
+    }
+
+    return metrics
+
+
+def collect_infrastructure_metrics_for_current_step():
+    """Coleta as métricas de infraestrutura do step atual e acumula nas métricas globais."""
+    metrics = get_simulation_metrics()
+    step_metrics = get_infrastructure_usage_metrics()
+    metrics.add_infrastructure_metrics(step_metrics)
+
+
+def collect_sla_violations_for_current_step():
+    """Coleta as violações de SLA do step atual e acumula nas métricas globais."""
+    metrics = get_simulation_metrics()
+    
+    for user in User.all():
+        user_sla_violations = get_sla_violations(user)
+        metrics.add_sla_violations(user_sla_violations)
+
+
+def topology_collect(self) -> dict:
+    """Method that collects a set of metrics for the object.
+
+    The network topology aggregates the following metrics from the simulation:
+        1. Infrastructure Usage
+            - Overall Occupation
+            - Occupation per Infrastructure Provider
+            - Occupation per Server Model
+            - Active Servers per Model
+            - Power Consumption
+                - Overall Power Consumption
+                - Power Consumption per Server Model
+        2. SLA Violations
+            - Number of Delay SLA Violations
+            - Number of Delay Violations per Delay SLA
+            - Number of Delay Violations per Access Pattern
+        3. Availability
+            - Total Perceived Downtime by Users
+            - Total Perceived Downtime per Access Pattern
+
+    Returns:
+        metrics (dict): Object metrics.
+    """
+    
+    # Obter métricas consolidadas
+    consolidated_metrics = get_simulation_metrics().get_consolidated_metrics()
+    
+    # Collecting availability metrics
+    user_total_perceived_downtime = 0
+    total_perceived_downtime_per_access_pattern = {}
+    
+    for user in User.all():
+        for app in user.applications:
+            perceived_downtime = sum(1 for status in app.downtime_history if status)
+            user_total_perceived_downtime += perceived_downtime
+
+            access_pattern = user.access_patterns[str(app.id)]
+            duration = access_pattern.duration_values[0]
+
+            if duration not in total_perceived_downtime_per_access_pattern:
+                total_perceived_downtime_per_access_pattern[duration] = 0
+            total_perceived_downtime_per_access_pattern[duration] += perceived_downtime
+
+    # Combinar todas as métricas
+    metrics = {
+        **consolidated_metrics,  # Métricas SLA e infraestrutura
+        
+        # Availability metrics
         "user_total_perceived_downtime": user_total_perceived_downtime,
         "total_perceived_downtime_per_access_pattern": total_perceived_downtime_per_access_pattern,
-        "raw_data": data,
     }
 
     return metrics

@@ -14,7 +14,6 @@ from simulator.extensions import *
 import math
 from datetime import datetime
 
-
 """TRUST EDGE ALGORITHM"""
 
 def trust_edge_v2(parameters: dict = {}):
@@ -27,6 +26,7 @@ def trust_edge_v2(parameters: dict = {}):
     # Checking if there are users making access requests to applications
     current_step = parameters.get("current_step") - 1
     apps_metadata = []
+
     for user in User.all():
         if is_making_request(user, current_step):
             # For each user making requests, collect application information
@@ -40,6 +40,7 @@ def trust_edge_v2(parameters: dict = {}):
                 }
                 apps_metadata.append(app_attrs)
 
+
     min_and_max_app = find_minimum_and_maximum(metadata=apps_metadata)
     
     apps_metadata = sorted(
@@ -49,15 +50,7 @@ def trust_edge_v2(parameters: dict = {}):
         get_norm(metadata=app, attr_name="intensity_score", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]) +
         (1 - get_norm(metadata=app, attr_name="demand_resource", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]))
     ), reverse=True
-)
-#     apps_metadata = sorted(
-#     apps_metadata, 
-#     key=lambda app: (
-#         get_norm(metadata=app, attr_name="delay_score", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]) +
-#         get_norm(metadata=app, attr_name="intensity_score", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]) +
-#         (1 - get_norm(metadata=app, attr_name="demand_resource", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]))
-#     ), reverse=True
-# )
+    )
 
     # Iterating over the sorted list of applications for provisioning
     for app_metadata in apps_metadata:
@@ -87,19 +80,11 @@ def trust_edge_v2(parameters: dict = {}):
                 key=lambda s: (
                     s["sla_violations"],
                     get_norm(metadata=s, attr_name="trust_cost", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
-                    get_norm(metadata=s, attr_name="amount_of_uncached_layers", min=min_and_max["minimum"], max=min_and_max["maximum"]),
+                    get_norm(metadata=s, attr_name="amount_of_uncached_layers", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
+                    get_norm(metadata=s, attr_name="power_consumption", min=min_and_max["minimum"], max=min_and_max["maximum"]),
                     
                 ),
             )
-            # edge_servers = sorted(
-            #     edge_servers,
-            #     key=lambda s: (
-            #         s["sla_violations"],
-            #         get_norm(metadata=s, attr_name="trust_cost", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
-            #         get_norm(metadata=s, attr_name="amount_of_uncached_layers", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
-            #         (1 - get_norm(metadata=s, attr_name="free_capacity", min=min_and_max["minimum"], max=min_and_max["maximum"])),
-            #     ),
-            # )
 
             # Greedily iterating over the list of edge servers to find a host for the service
             for edge_server_metadata in edge_servers:
@@ -126,6 +111,11 @@ def trust_edge_v2(parameters: dict = {}):
                     
                     break
 
+    # Collecting SLA violations for the current step
+    collect_sla_violations_for_current_step()
+
+    # Collecting infrastructure usage metrics for the current step
+    collect_infrastructure_metrics_for_current_step()
 
     # Displaying reliability metrics
     #display_reliability_metrics(parameters=parameters)
@@ -800,6 +790,7 @@ def display_simulation_metrics(simulation_parameters):
     
     print(dumps(metrics, indent=4))
     print(f"Total Perceived Downtime: {total_perceived_downtime}")
+
 
 def display_reliability_metrics(parameters: dict = {}):
     """Exibe um resumo das métricas de confiabilidade de todos os servidores.

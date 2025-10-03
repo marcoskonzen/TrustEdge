@@ -32,6 +32,9 @@ def main(parameters: dict):
     # Defining a seed value to enable reproducible results
     seed(parameters["seed_value"])
 
+    # Resetar contadores globais de SLA no início da simulação
+    reset_all_counters()
+
     # Creating a Simulator object
     simulator = Simulator(
         tick_duration=1,

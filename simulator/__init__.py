@@ -18,7 +18,12 @@ from .helper_functions import (
     provision,
     reset_server,
     user_set_communication_path,
-    topology_collect
+    get_sla_violations,
+    get_infrastructure_usage_metrics,
+    collect_infrastructure_metrics_for_current_step,
+    collect_sla_violations_for_current_step,
+    reset_all_counters,
+    topology_collect,
 )
 
 __all__ = [
@@ -41,5 +46,11 @@ __all__ = [
     "provision",
     "reset_server",
     "user_set_communication_path",
+    "get_sla_violations",
+    "get_infrastructure_usage_metrics",
+    "collect_infrastructure_metrics_for_current_step",
+    "collect_sla_violations_for_current_step",
+    "reset_all_counters",
     "topology_collect",
+    
 ]

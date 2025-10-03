@@ -35,10 +35,15 @@ def trust_edge_v1(parameters: dict = {}):
                     "object": app,
                     "delay_sla": app.users[0].delay_slas[str(app.id)],
                     "delay_score": get_application_delay_score(app),
+                    "intensity_score": get_application_access_intensity_score(app),
                 }
                 apps_metadata.append(app_attrs)
 
-    apps_metadata = sorted(apps_metadata, key=lambda app: app["delay_score"], reverse=True)
+    apps_metadata = sorted(
+        apps_metadata,
+        key=lambda app: app["delay_score"],
+        reverse=True
+        )
 
     # Iterando sobre a lista ordenada das aplicações para provisionamento
     for app_metadata in apps_metadata:
@@ -61,10 +66,17 @@ def trust_edge_v1(parameters: dict = {}):
         edge_servers = sorted(
             edge_servers,
             key=lambda s: (
-                s["sla_violations"],
                 get_norm(metadata=s, attr_name="trust_cost", min=min_and_max["minimum"], max=min_and_max["maximum"]),
             ),
         )
+
+        # edge_servers = sorted(
+        #     edge_servers,
+        #     key=lambda s: (
+        #         s["sla_violations"],
+        #         get_norm(metadata=s, attr_name="trust_cost", min=min_and_max["minimum"], max=min_and_max["maximum"]),
+        #     ),
+        # )
 
         # Greedily iterating over the list of edge servers to find a host for the service
         for edge_server_metadata in edge_servers:
@@ -93,6 +105,12 @@ def trust_edge_v1(parameters: dict = {}):
             # else:
             #     raise Exception(f"{app} could not be provisioned.")
 
+    # Collecting SLA violations for the current step
+    collect_sla_violations_for_current_step()
+
+    # Collecting infrastructure usage metrics for the current step
+    collect_infrastructure_metrics_for_current_step()
+    
     # Exibindo métricas de confiabilidade
     #display_reliability_metrics(parameters=parameters)
 
@@ -427,6 +445,39 @@ def get_application_delay_score(app: object) -> float:
         app_delay_score = 1 / ((edge_servers_that_dont_violate_delay_sla * delay_sla) ** (1 / 2))
 
     return app_delay_score
+
+
+def get_application_access_intensity_score(app: object) -> float:
+    """Calculates the application access intensity score based on the user's access pattern.
+    
+    Applications with longer access duration and shorter intervals have higher priority.
+    
+    Args:
+        app (object): Application object.
+        
+    Returns:
+        float: Access intensity score (higher = more priority).
+    """
+    user = app.users[0]
+    
+    # Find the access pattern for this application
+    access_pattern = user.access_patterns[str(app.id)]
+    
+    # Get duration and interval values (use the first value from the list)
+    duration = access_pattern.duration_values[0]
+    interval = access_pattern.interval_values[0]
+    
+    # Calculate score: the longer the duration and shorter the interval, the higher the score
+    # Use log to smooth extreme differences
+    import math
+    
+    # Fórmula: duration / interval * fator de normalização
+    base_score = duration / interval
+    
+    # Aplicar log para suavizar + adicionar fator multiplicativo
+    intensity_score = math.log(1 + base_score) * 10
+    
+    return intensity_score
 
 
 def get_server_trust_cost(server):
