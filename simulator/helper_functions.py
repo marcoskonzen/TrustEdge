@@ -118,13 +118,7 @@ class SimulationMetrics:
             self.total_occupation_steps / self.simulation_steps 
             if self.simulation_steps > 0 else 0
         )
-        
-        # Calcular ocupação média geral apenas dos servidores disponíveis
-        avg_available_overall_occupation = (
-            self.available_occupation_steps / self.simulation_steps 
-            if self.simulation_steps > 0 else 0
-        )
-
+      
         # Calcular ocupação média por modelo
         avg_occupation_per_model = {}
         for model_name, samples in self.occupation_samples_per_model.items():
@@ -140,18 +134,86 @@ class SimulationMetrics:
         for model_name, samples in self.available_occupation_samples_per_model.items():
             avg_available_occupation_per_model[model_name] = sum(samples) / len(samples) if samples else 0
         
+        # Calcular média ponderada usando os valores por modelo e número de servidores
+        total_weighted_available = 0
+        total_servers = 0
+        
+        for model_name, avg_occupation in avg_available_occupation_per_model.items():
+            servers_count = self.total_servers_per_model.get(model_name, 0)
+            total_weighted_available += avg_occupation * servers_count
+            total_servers += servers_count
+        
+        avg_available_overall_occupation = (
+            total_weighted_available / total_servers 
+            if total_servers > 0 else 0
+        )
+        
         # Converter sets de servidores ativos para contagens
         active_servers_count_per_model = {}
         for model_name, server_set in self.active_servers_per_model.items():
             active_servers_count_per_model[model_name] = len(server_set)
-        
+
+        # Coletar métricas de downtime NO FINAL da simulação
+        user_total_perceived_downtime = 0
+        total_perceived_downtime_per_access_pattern = {}
+        total_perceived_downtime_per_delay_sla = {}
+        total_violations_sla_downtime = 0
+        total_violations_per_access_pattern = {}
+        total_violations_per_delay_sla = {}
+
+        for user in User.all():
+            
+            user_violations_sla_downtime = 0
+            
+            for app in user.applications:
+                access_pattern = user.access_patterns[str(app.id)]
+                duration = access_pattern.duration_values[0]
+                delay_sla = user.delay_slas[str(app.id)]
+
+                if hasattr(app, 'downtime_history') and app.downtime_history:
+                    perceived_downtime = sum(1 for status in app.downtime_history if status)
+                    user_total_perceived_downtime += perceived_downtime
+
+                    
+                    if duration not in total_perceived_downtime_per_access_pattern:
+                        total_perceived_downtime_per_access_pattern[duration] = 0
+                    total_perceived_downtime_per_access_pattern[duration] += perceived_downtime
+
+                    
+                    if delay_sla not in total_perceived_downtime_per_delay_sla:
+                        total_perceived_downtime_per_delay_sla[delay_sla] = 0
+                    total_perceived_downtime_per_delay_sla[delay_sla] += perceived_downtime
+
+                    user_maximum_downtime_allowed = user.maximum_downtime_allowed[str(app.id)]
+                    
+                    if perceived_downtime > user_maximum_downtime_allowed:
+                        app_violation = perceived_downtime - user_maximum_downtime_allowed
+                        total_violations_sla_downtime += app_violation
+
+                        if duration not in total_violations_per_access_pattern:
+                            total_violations_per_access_pattern[duration] = 0
+                        total_violations_per_access_pattern[duration] += app_violation
+
+                        if delay_sla not in total_violations_per_delay_sla:
+                            total_violations_per_delay_sla[delay_sla] = 0
+                        total_violations_per_delay_sla[delay_sla] += app_violation
+
+                
+
         return {
-            # SLA metrics
-            "total_sla_violations": self.sla_violations,
+            "total_simulation_steps": self.simulation_steps,
+            "=========== SLA metrics ===========": None,
+            "total_delay_sla_violations": self.sla_violations,
             "delay_violations_per_delay_sla": dict(self.delay_violations_per_delay_sla),
             "delay_violations_per_access_pattern": dict(self.delay_violations_per_access_pattern),
-            
-            # Infrastructure metrics
+            "total_perceived_downtime": user_total_perceived_downtime,
+            "total_perceived_downtime_per_access_pattern": dict(total_perceived_downtime_per_access_pattern),
+            "total_perceived_downtime_per_delay_sla": dict(total_perceived_downtime_per_delay_sla),
+            "total_downtime_sla_violations": total_violations_sla_downtime,
+            "downtime_violations_per_access_pattern": dict(total_violations_per_access_pattern),
+            "downtime_violations_per_delay_sla": dict(total_violations_per_delay_sla),
+
+            "=========== Infrastructure metrics ===========": None,
             "total_servers_per_model": dict(self.total_servers_per_model),
             "total_overloaded_servers": self.total_overloaded_servers,
             "average_overall_occupation": avg_overall_occupation,
@@ -160,7 +222,7 @@ class SimulationMetrics:
             "average_available_occupation_per_model": avg_available_occupation_per_model,
             "total_power_consumption": self.total_power_consumption,
             "total_power_consumption_per_model": total_power_per_model,
-            "total_simulation_steps": self.simulation_steps,
+            
             
         }
 
@@ -826,6 +888,21 @@ def user_set_communication_path(self, app: object, communication_path: list = []
     return communication_path
 
 
+def is_user_accessing_application(user, application, current_step):
+    """Verifica se usuário está acessando aplicação no step atual."""
+    app_id = str(application.id)
+    
+    if app_id not in user.access_patterns:
+        return False
+    
+    access_pattern = user.access_patterns[app_id]
+    if not access_pattern.history:
+        return False
+    
+    last_access = access_pattern.history[-1]
+    return last_access["start"] <= current_step <= last_access["end"]
+
+
 def get_sla_violations(user) -> dict:
     """Method that collects a set of SLA violation metrics for a given user."""
     
@@ -838,7 +915,6 @@ def get_sla_violations(user) -> dict:
         user.set_communication_path(app=app)
         delay_sla = user.delay_slas[str(app.id)]
         delay = user._compute_delay(app=app, metric="latency")
-
         access_pattern = user.access_patterns[str(app.id)]
         duration = access_pattern.duration_values[0]
         
@@ -857,7 +933,7 @@ def get_sla_violations(user) -> dict:
     return {
         'delay_sla_violations': delay_sla_violations,
         'delay_violations_per_delay_sla': delay_violations_per_delay_sla,
-        'delay_violations_per_access_pattern': delay_violations_per_access_pattern
+        'delay_violations_per_access_pattern': delay_violations_per_access_pattern,
     }
 
 
@@ -932,22 +1008,33 @@ def get_infrastructure_usage_metrics() -> dict:
     # Aggregating overall metrics for this step
     overall_occupation = overall_occupation / EdgeServer.count() if EdgeServer.count() > 0 else 0
 
-    available_edge_servers = sum(1 for s in EdgeServer.all() if s.status == "available")
-    available_overall_occupation = available_overall_occupation / available_edge_servers if available_edge_servers > 0 else 0
-
-
     # Convert occupation per model to averages for this step
     for model_name in occupation_per_model.keys():
         total_servers = total_servers_per_model[model_name]
         occupation_per_model[model_name] = occupation_per_model[model_name] / total_servers if total_servers > 0 else 0
 
-    #Convert occupation per model to averages (apenas servidores disponíveis)
+    # Calcular available_overall_occupation como média ponderada
+    total_weighted_occupation = 0
+    total_available_servers = 0
+    
     for model_name in available_occupation_per_model.keys():
-        available_servers = available_servers_per_model.get(model_name, 0)
-        available_occupation_per_model[model_name] = (
-            available_occupation_per_model[model_name] / available_servers 
-            if available_servers > 0 else 0
-        )
+        available_servers_for_model = available_servers_per_model.get(model_name, 0)
+        if available_servers_for_model > 0:
+            # Ocupação média deste modelo
+            model_avg_occupation = available_occupation_per_model[model_name] / available_servers_for_model
+            available_occupation_per_model[model_name] = model_avg_occupation
+            
+            # Contribuir para média ponderada global
+            total_weighted_occupation += model_avg_occupation * available_servers_for_model
+            total_available_servers += available_servers_for_model
+        else:
+            available_occupation_per_model[model_name] = 0
+    
+    # Ocupação geral disponível (média ponderada)
+    available_overall_occupation = (
+        total_weighted_occupation / total_available_servers 
+        if total_available_servers > 0 else 0
+    )
 
     # Convert active servers sets to counts
     for model_name in active_servers_per_model.keys():
@@ -1010,30 +1097,10 @@ def topology_collect(self) -> dict:
     
     # Obter métricas consolidadas
     consolidated_metrics = get_simulation_metrics().get_consolidated_metrics()
-    
-    # Collecting availability metrics
-    user_total_perceived_downtime = 0
-    total_perceived_downtime_per_access_pattern = {}
-    
-    for user in User.all():
-        for app in user.applications:
-            perceived_downtime = sum(1 for status in app.downtime_history if status)
-            user_total_perceived_downtime += perceived_downtime
-
-            access_pattern = user.access_patterns[str(app.id)]
-            duration = access_pattern.duration_values[0]
-
-            if duration not in total_perceived_downtime_per_access_pattern:
-                total_perceived_downtime_per_access_pattern[duration] = 0
-            total_perceived_downtime_per_access_pattern[duration] += perceived_downtime
 
     # Combinar todas as métricas
     metrics = {
         **consolidated_metrics,  # Métricas SLA e infraestrutura
-        
-        # Availability metrics
-        "user_total_perceived_downtime": user_total_perceived_downtime,
-        "total_perceived_downtime_per_access_pattern": total_perceived_downtime_per_access_pattern,
     }
 
     return metrics

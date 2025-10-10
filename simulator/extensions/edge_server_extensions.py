@@ -97,6 +97,8 @@ def edge_server_step(self):
             for service in Service.all():
                 if service.server == self:
                     service._available = False
+                    service.server = None
+                    
 
                 service_has_migrations = len(service._Service__migrations) > 0
                 if service_has_migrations:
@@ -121,6 +123,10 @@ def edge_server_step(self):
                             users = app.users
                             for user in users:
                                 user.set_communication_path(app)
+
+            # Resetting the server's CPU and memory demand
+            self.cpu_demand = 0
+            self.memory_demand = 0
 
     # Container provisioning management
     while len(self.waiting_queue) > 0 and len(self.download_queue) < self.max_concurrent_layer_downloads:

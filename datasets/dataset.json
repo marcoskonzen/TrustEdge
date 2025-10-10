@@ -5211,7 +5211,7 @@
                     "45": 30
                 },
                 "maximum_downtime_allowed": {
-                    "45": 200
+                    "45": 100
                 },
                 "communication_paths": {
                     "45": [
@@ -5560,7 +5560,7 @@
                     "51": 30
                 },
                 "maximum_downtime_allowed": {
-                    "51": 200
+                    "51": 100
                 },
                 "communication_paths": {
                     "51": [

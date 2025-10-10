@@ -17,7 +17,7 @@ from datetime import datetime
 """TRUST EDGE ALGORITHM"""
 
 def trust_edge_v2(parameters: dict = {}):
-    """Algoritmo principal que implementa a lógica do TrustEdge.
+    """Algoritmo principal que implementa a lógica do TrustEdge_v2 (sem migração proativa).
     
     Args:
         parameters (dict): Parâmetros da simulação.
@@ -81,7 +81,7 @@ def trust_edge_v2(parameters: dict = {}):
                     s["sla_violations"],
                     get_norm(metadata=s, attr_name="trust_cost", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
                     get_norm(metadata=s, attr_name="amount_of_uncached_layers", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
-                    get_norm(metadata=s, attr_name="power_consumption", min=min_and_max["minimum"], max=min_and_max["maximum"]),
+                    get_norm(metadata=s, attr_name="overall_delay", min=min_and_max["minimum"], max=min_and_max["maximum"]),
                     
                 ),
             )
@@ -557,9 +557,10 @@ def get_host_candidates(user: object, service: object) -> list:
         conditional_reliability = get_server_conditional_reliability(edge_server, upcoming_instants=service_expected_duration)
 
         # Gathering the edge server's power consumption cost based on its CPU usage
-        static_power_consumption = edge_server.power_model_parameters["static_power_percentage"]
-        consumption_per_core = edge_server.power_model_parameters["max_power_consumption"] / edge_server.cpu
-        power_consumption = consumption_per_core + static_power_consumption * (1 - sign(edge_server.cpu_demand))
+        #static_power_consumption = edge_server.power_model_parameters["static_power_percentage"]
+        #consumption_per_core = edge_server.power_model_parameters["max_power_consumption"] / edge_server.cpu
+        #power_consumption = consumption_per_core + static_power_consumption * (1 - sign(edge_server.cpu_demand))
+        power_consumption = edge_server.power_model_parameters["max_power_consumption"]
 
         # Gathering the list of container layers used by the service's image
         service_image = ContainerImage.find_by(attribute_name="digest", attribute_value=service.image_digest)
