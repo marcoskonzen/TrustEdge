@@ -5,6 +5,7 @@ def step(self):
     """Method that executes the events involving the object at each time step."""
     # Updating user access
     current_step = self.model.schedule.steps + 1
+    
     for app in self.applications:
         last_access = self.access_patterns[str(app.id)].history[-1]
 

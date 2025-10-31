@@ -84,7 +84,7 @@ if __name__ == "__main__":
 
     # Generic arguments
     parser.add_argument("--seed", "-s", help="Seed value for EdgeSimPy", default="1")
-    parser.add_argument("--input", "-i", help="Input dataset file", default="datasets/dataset.json")
+    parser.add_argument("--input", "-i", help="Input dataset file", default="datasets/dataset_extended.json")
     parser.add_argument("--algorithm", "-a", help="Algorithm that will be executed", required=True)
     parser.add_argument("--time-steps", "-t", help="Number of time steps (seconds) to be simulated", required=True)
 

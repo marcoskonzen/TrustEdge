@@ -8,7 +8,7 @@ from simulator.extensions.base_failure_model import BaseFailureGroupModel
 from simulator.helper_functions import *
 
 # Importing Python modules
-from random import seed, sample
+from random import seed, sample, randint
 import matplotlib.pyplot as plt
 import networkx as nx
 import json
@@ -131,7 +131,7 @@ def user_to_dict(self) -> dict:
 seed(0)
 
 # Creating list of map coordinates
-map_coordinates = hexagonal_grid(x_size=4, y_size=4)
+map_coordinates = hexagonal_grid(x_size=25, y_size=25)
 
 # Creating base stations for providing wireless connectivity to users and network switches for wired connectivity
 for coordinates_id, coordinates in enumerate(map_coordinates):
@@ -143,13 +143,13 @@ for coordinates_id, coordinates in enumerate(map_coordinates):
     # Creating a network switch object using the "sample_switch()" generator, which embeds built-in power consumption specs
     network_switch = sample_switch()
     base_station._connect_to_network_switch(network_switch=network_switch)
-
+    base_station.has_registry = False  # This attribute will be properly defined later
 # Creating a partially-connected mesh network topology
 partially_connected_hexagonal_mesh(
     network_nodes=NetworkSwitch.all(),
     link_specifications=[
         {
-            "number_of_objects": 33,
+            "number_of_objects": 1776,
             "delay": 3,
             "bandwidth": 12.5,
             "transmission_delay": 0.06,  # Value in seconds
@@ -157,7 +157,7 @@ partially_connected_hexagonal_mesh(
     ],
 )
 
-SERVERS_PER_SPEC = 8
+SERVERS_PER_SPEC = 6
 edge_server_specifications = [
     {
         "number_of_objects": SERVERS_PER_SPEC,
@@ -169,8 +169,8 @@ edge_server_specifications = [
         "max_power_consumption": 243,
         # Failure-related parameters:
         "time_to_boot": 10,
-        "initial_failure_time_step": 1,
-        "number_of_failures": {"lower_bound": 1, "upper_bound": 2},
+        "initial_failure_time_step": randint(1, 20),
+        "number_of_failures": {"lower_bound": 1, "upper_bound": 5},
         "failure_duration": {"lower_bound": 50, "upper_bound": 100},
         "interval_between_failures": {"lower_bound": 10, "upper_bound": 30},
         "interval_between_sets": {"lower_bound": 10, "upper_bound": 30},
@@ -185,11 +185,43 @@ edge_server_specifications = [
         "max_power_consumption": 1387,
         # Failure-related parameters:
         "time_to_boot": 10,
-        "initial_failure_time_step": 1,
+        "initial_failure_time_step": randint(1, 30),
         "number_of_failures": {"lower_bound": 2, "upper_bound": 4},
         "failure_duration": {"lower_bound": 10, "upper_bound": 50},
         "interval_between_failures": {"lower_bound": 100, "upper_bound": 200},
         "interval_between_sets": {"lower_bound": 100, "upper_bound": 200},
+    },
+    {
+        "number_of_objects": SERVERS_PER_SPEC,
+        "model_name": "Proliant",
+        "cpu": 36,
+        "memory": 64,
+        "disk": 131072,  # 128 GB
+        "static_power_percentage": 45 / 276,
+        "max_power_consumption": 276,
+        # Failure-related parameters:
+        "time_to_boot": 10,
+        "initial_failure_time_step": randint(1, 30),
+        "number_of_failures": {"lower_bound": 1, "upper_bound": 2},
+        "failure_duration": {"lower_bound": 10, "upper_bound": 30},
+        "interval_between_failures": {"lower_bound": 150, "upper_bound": 250},
+        "interval_between_sets": {"lower_bound": 150, "upper_bound": 250},
+    },
+    {
+        "number_of_objects": 1,
+        "model_name": "Jetson TX2",
+        "cpu": 6,
+        "memory": 8,
+        "disk": 131072,  # 128 GB
+        "static_power_percentage": 7.5 / 15,
+        "max_power_consumption": 15,
+        # Failure-related parameters:
+        "time_to_boot": 1,
+        "initial_failure_time_step": float("inf"),  # This server will never fail
+        "number_of_failures": {"lower_bound": 0, "upper_bound": 0},
+        "failure_duration": {"lower_bound": 0, "upper_bound": 0},
+        "interval_between_failures": {"lower_bound": 0, "upper_bound": 0},
+        "interval_between_sets": float("inf"),  # This server will never fail
     },
 ]
 
@@ -215,6 +247,10 @@ for spec in edge_server_specifications:
         # Connecting the edge server to a random base station that has no edge server connected to it yet
         base_station = sample([base_station for base_station in BaseStation.all() if len(base_station.edge_servers) == 0], 1)[0]
         base_station._connect_to_edge_server(edge_server=server)
+        if server.model_name == "Jetson TX2":
+            server.base_station.has_registry = True  # The Jetson TX2 server will host a container registry
+        else:
+            server.base_station.has_registry = False
 
         # Failure-related attributes
         server.time_to_boot = spec["time_to_boot"]
@@ -222,7 +258,12 @@ for spec in edge_server_specifications:
         server.available = True
 
         # Defining the failure trace
-        initial_failure_time_step = -2550
+        initial_failure_time_step = spec["initial_failure_time_step"]
+        if server.model_name != "Jetson TX2":
+            initial_failure_time_step = -2550
+        
+        print(f"[LOG] Creating failure model for {server.model_name} with initial_failure_time_step: {initial_failure_time_step}")
+        
         BaseFailureGroupModel(
             device=server,
             initial_failure_time_step=initial_failure_time_step,
@@ -232,7 +273,7 @@ for spec in edge_server_specifications:
                 "interval_between_failures": spec["interval_between_failures"],
                 "interval_between_sets": spec["interval_between_sets"],
             },
-            number_of_failure_groups_to_create=20,
+            number_of_failure_groups_to_create=20 if server.model_name != "Jetson TX2" else 0,  # The Jetson TX2 server will never fail
         )
         # Creating the failure history (only for failures that started before the simulation began - "becomes_available_at" < 0)
         # and defining status and availability according to failure history.
@@ -262,8 +303,9 @@ for spec in edge_server_specifications:
                     break
 
 
-display_topology(topology=Topology.first())
-
+#display_topology(topology=Topology.first())
+for base_station in BaseStation.all():
+    print(f"[LOG] {base_station} - Has registry? {base_station.has_registry} - Edge servers: {base_station.edge_servers}")
 
 # Reading specifications for container images and container registries
 with open("container_images.json", "r", encoding="UTF-8") as read_file:
@@ -324,9 +366,8 @@ for container_image in container_image_specifications:
 container_registry_specifications = [
     {
         "number_of_objects": 1,
-        "base_station_id": 1,
         "images": condensed_images_metadata,
-        "cpu_demand": 8,
+        "cpu_demand": 6,
         "memory_demand": 8,
     },
 ]
@@ -340,7 +381,7 @@ registries = create_container_registries(
 # Creating container registries and accommodating them within the infrastructure
 for index, registry_spec in enumerate(container_registry_specifications):
     # Creating an edge server to host the registry
-    registry_base_station = BaseStation.find_by_id(registry_spec["base_station_id"])
+    registry_base_station = [bs for bs in BaseStation.all() if bs.has_registry][0]
     registry_host = registry_base_station.edge_servers[0]
     registry_base_station._connect_to_edge_server(edge_server=registry_host)
 
@@ -412,10 +453,11 @@ for instance_index, service_spec in enumerate(service_image_specification_values
 
     # Defining the user's access pattern
     user_access_pattern = access_pattern_specification_values[instance_index]
+    start = randint(1, 20)  # Randomizing the time step when the user will start accessing the application
     user_access_pattern["class"](
         user=user,
         app=app,
-        start=1,
+        start=start,
         duration_values=user_access_pattern["duration_values"],
         interval_values=user_access_pattern["interval_values"],
     )
@@ -479,7 +521,7 @@ EdgeServer._to_dict = edge_server_to_dict
 User._to_dict = user_to_dict
 
 # Exporting scenario
-ComponentManager.export_scenario(save_to_file=True, file_name="dataset")
+ComponentManager.export_scenario(save_to_file=True, file_name="dataset_extended")
 
 # Exporting the topology representation to an image file
-display_topology(topology=Topology.first())
+#display_topology(topology=Topology.first())

@@ -163,8 +163,6 @@ class SimulationMetrics:
 
         for user in User.all():
             
-            user_violations_sla_downtime = 0
-            
             for app in user.applications:
                 access_pattern = user.access_patterns[str(app.id)]
                 duration = access_pattern.duration_values[0]
@@ -187,7 +185,7 @@ class SimulationMetrics:
                     user_maximum_downtime_allowed = user.maximum_downtime_allowed[str(app.id)]
                     
                     if perceived_downtime > user_maximum_downtime_allowed:
-                        app_violation = perceived_downtime - user_maximum_downtime_allowed
+                        app_violation = 1
                         total_violations_sla_downtime += app_violation
 
                         if duration not in total_violations_per_access_pattern:
@@ -805,34 +803,20 @@ def provision(user: object, application: object, service: object, edge_server: o
         layer.server = edge_server
         edge_server.container_layers.append(layer)
 
-    user.set_communication_path(app=application)
-
+    path_delay = calculate_path_delay(
+            origin_network_switch=user.base_station.network_switch, 
+            target_network_switch=edge_server.network_switch
+        )
+    # Adicionar delay wireless
+    wireless_delay = getattr(user.base_station, 'wireless_delay')
+    user.delays[str(application.id)] = wireless_delay + path_delay
     
-def reset_server(edge_server: object):
-    # Resets the edge server's resource demands.
+    # user.set_communication_path(app=application)
+    # new_delay = user._compute_delay(app=application, metric="latency")
+    # user.delays[str(application.id)] = new_delay
 
-    # Resetting the demand
-    edge_server.cpu_demand = 0
-    edge_server.memory_demand = 0
-    edge_server.disk_demand = 0
-
-    # Deprovisioning services
-    for service in edge_server.services:
-        service.server = None
-    edge_server.services = []
-
-    # Removing layers from edge servers not initially set as hosts for container registries
-    if len(edge_server.container_registries) == 0:
-        layers = list(edge_server.container_layers)
-        edge_server.container_layers = []
-        for layer in layers:
-            layer.server = None
-            ContainerLayer.remove(layer)
-
-    for user in User.all():
-        for app in user.applications:
-            user.delays[str(app.id)] = 0
-            user.communication_paths[str(app.id)] = []
+    # DEBUG: Verificar se o delay foi atualizado
+    print(f"[DEBUG] Delay pós-provisionamento App {application.id}: {user.delays[str(application.id)]}")
 
 
 def user_set_communication_path(self, app: object, communication_path: list = []) -> list:
@@ -900,7 +884,9 @@ def is_user_accessing_application(user, application, current_step):
         return False
     
     last_access = access_pattern.history[-1]
-    return last_access["start"] <= current_step <= last_access["end"]
+    is_accessing = last_access["start"] <= current_step <= last_access["end"]
+    
+    return is_accessing
 
 
 def get_sla_violations(user) -> dict:
@@ -909,9 +895,14 @@ def get_sla_violations(user) -> dict:
     delay_sla_violations = 0
     delay_violations_per_delay_sla = {}
     delay_violations_per_access_pattern = {}
+
+    current_step = user.model.schedule.steps
     
     # Collecting delay SLA metrics
     for app in user.applications:
+        if not is_user_accessing_application(user, app, current_step):
+            continue
+
         user.set_communication_path(app=app)
         delay_sla = user.delay_slas[str(app.id)]
         delay = user._compute_delay(app=app, metric="latency")
@@ -937,6 +928,461 @@ def get_sla_violations(user) -> dict:
     }
 
 
+def update_user_perceived_downtime_for_current_step():
+    """
+    Atualiza o downtime percebido por todos os usuários no step atual.
+    
+    REGRA: Downtime percebido = usuário está tentando acessar E aplicação indisponível
+    
+    Esta função deve ser chamada UMA VEZ por step por cada algoritmo.
+    """
+    current_step = User.first().model.schedule.steps + 1
+    
+    for user in User.all():
+        # Inicializar histórico se não existir
+        if not hasattr(user, "user_perceived_downtime_history"):
+            user.user_perceived_downtime_history = {}
+        
+        for app in user.applications:
+            app_id = str(app.id)
+            
+            # Inicializar histórico da aplicação se não existir
+            if app_id not in user.user_perceived_downtime_history:
+                user.user_perceived_downtime_history[app_id] = []
+            
+            # Verificar se usuário está fazendo requisição no step atual
+            is_making_request = user.making_requests[app_id][str(current_step)]
+            
+            if is_making_request:
+                # Verificar se aplicação está disponível
+                app_available = len([s for s in app.services if s._available]) == len(app.services)
+                
+                if not app_available:
+                    # DOWNTIME PERCEBIDO: usuário quer acessar mas app indisponível
+                    user.user_perceived_downtime_history[app_id].append(True)
+                else:
+                    # Aplicação disponível - sem downtime percebido
+                    user.user_perceived_downtime_history[app_id].append(False)
+            else:
+                # Usuário não está tentando acessar - sem downtime percebido
+                user.user_perceived_downtime_history[app_id].append(False)
+
+
+def get_user_perceived_downtime_count(application):
+    """
+    Calcula o total de downtime percebido para uma aplicação específica.
+    
+    Args:
+        application: Objeto da aplicação
+        
+    Returns:
+        int: Número total de steps com downtime percebido por todos os usuários
+    """
+    total_perceived_downtime = 0
+    
+    for user in application.users:
+        if (hasattr(user, "user_perceived_downtime_history") and 
+            str(application.id) in user.user_perceived_downtime_history):
+            # Contar apenas os valores True (downtime percebido)
+            user_downtime = sum(1 for status in user.user_perceived_downtime_history[str(application.id)] if status)
+            total_perceived_downtime += user_downtime
+    
+    return total_perceived_downtime
+
+
+# ============================================================================
+# RELIABILITY AND TRUST METRICS
+# ============================================================================
+
+def get_server_total_failures(server):
+    """Retorna número total de falhas de um servidor."""
+    return len(server.failure_model.failure_history)
+
+def get_server_mttr(server):
+    """Calcula Mean Time To Repair (MTTR) do servidor."""
+    history = server.failure_model.failure_history
+    repair_times = []
+    
+    for failure_occurrence in history:
+        repair_times.append(failure_occurrence["becomes_available_at"] - failure_occurrence["failure_starts_at"])
+    
+    return sum(repair_times) / len(repair_times) if repair_times else 0
+
+def get_server_downtime_history(server):
+    """Calcula downtime total do histórico completo."""
+    total_downtime = 0
+    
+    for failure_occurrence in server.failure_model.failure_history:
+        failure_start = failure_occurrence["failure_starts_at"]
+        failure_end = failure_occurrence["becomes_available_at"]
+        total_downtime += failure_end - failure_start
+    
+    return total_downtime
+
+def get_server_uptime_history(server):
+    """Calcula uptime total do histórico completo."""
+    if not server.failure_model.failure_history:
+        return float("inf")
+    
+    total_time_span = abs(getattr(server.failure_model, 'initial_failure_time_step') - (server.model.schedule.steps + 1)) + 1
+    total_downtime = get_server_downtime_history(server=server)
+    
+    return total_time_span - total_downtime
+
+def get_server_downtime_simulation(server):
+    """Calcula downtime durante a simulação."""
+    return sum(1 for available in server.available_history if available is False)
+
+def get_server_uptime_simulation(server):
+    """Calcula uptime durante a simulação."""
+    return sum(1 for available in server.available_history if available is True)
+
+def get_server_mtbf(server):
+    """Calcula Mean Time Between Failures (MTBF)."""
+    number_of_failures = len(server.failure_model.failure_history)
+    
+    if number_of_failures == 0:
+        return float("inf")
+    
+    return get_server_uptime_history(server) / number_of_failures
+
+def get_server_failure_rate(server):
+    """Calcula taxa de falha do servidor."""
+    mtbf = get_server_mtbf(server)
+    return 1 / mtbf if mtbf != 0 and mtbf != float("inf") else 0
+
+def get_server_conditional_reliability(server, upcoming_instants):
+    """Calcula confiabilidade condicional para instantes futuros."""
+    server_failure_rate = get_server_failure_rate(server)
+    
+    if server_failure_rate == 0:
+        return 100.0  # Máxima confiabilidade
+    
+    return (math.exp(-server_failure_rate * upcoming_instants)) * 100
+
+def get_time_since_last_repair(server):
+    """Calcula tempo desde último reparo."""
+    if not server.failure_model.failure_history:
+        return float("inf")
+    
+    current_step = server.model.schedule.steps
+    if is_ongoing_failure(server, current_step):
+        return 0
+    
+    # Encontrar reparo mais recente
+    sorted_history = sorted(
+        server.failure_model.failure_history, 
+        key=lambda x: x["becomes_available_at"], 
+        reverse=True
+    )
+    
+    last_repair = None
+    for failure in sorted_history:
+        if failure["becomes_available_at"] <= current_step:
+            last_repair = failure
+            break
+    
+    if last_repair:
+        return current_step + 1 - last_repair["becomes_available_at"]
+    
+    return float("inf")
+
+def get_server_trust_cost(server):
+    """Calcula custo de risco instantâneo do servidor."""
+    failure_rate = get_server_failure_rate(server)
+    time_since_repair = get_time_since_last_repair(server)
+    mtbf = get_server_mtbf(server)
+    
+    # Casos especiais
+    if failure_rate == 0 or mtbf == float("inf"):
+        return 0
+    
+    if time_since_repair == 0:
+        return float("inf")  # Servidor em falha
+    
+    # Cálculo do risco baseado na proporção tempo/MTBF
+    proportion = time_since_repair / mtbf
+    return failure_rate * proportion
+
+def get_application_delay_score(app: object) -> float:
+    """Calcula score de urgência por delay (MAIOR = mais urgente)."""
+    user = app.users[0]
+    delay_sla = user.delay_slas[str(app.id)]
+    current_delay = user.delays[str(app.id)] if user.delays[str(app.id)] is not None else 0
+    
+    # 1. Urgência baseada na proximidade da violação
+    delay_urgency = max(0, current_delay / delay_sla) if delay_sla > 0 else 0
+    
+    # 2. Escassez de recursos (poucos servidores adequados = maior urgência)
+    user_switch = user.base_station.network_switch
+    available_servers = [s for s in EdgeServer.all() if s.status == "available"]
+    
+    suitable_servers = 0
+    for edge_server in available_servers:
+        server_delay = calculate_path_delay(
+            origin_network_switch=user_switch, 
+            target_network_switch=edge_server.network_switch
+        )
+        if server_delay <= delay_sla:
+            suitable_servers += 1
+    
+    # Escassez: poucos servidores = maior score
+    if suitable_servers == 0:
+        scarcity_factor = 10.0  # Score alto mas finito para indicar escassez total
+    else:
+        scarcity_factor = 1.0 / suitable_servers
+    
+    # Combinar urgência e escassez
+    delay_score = (delay_urgency * 2.0) + scarcity_factor
+    
+    return delay_score
+
+def get_application_access_intensity_score(app: object) -> float:
+    """Calcula score de intensidade de acesso (MAIOR = mais intenso)."""
+    user = app.users[0]
+    access_pattern = user.access_patterns[str(app.id)]
+    
+    duration = access_pattern.duration_values[0]
+    interval = access_pattern.interval_values[0]
+    
+    # Frequência de acesso (quanto menor o intervalo, maior a frequência)
+    frequency_score = 1.0 / interval if interval > 0 else 1.0
+    
+    # Duração do acesso (quanto maior, mais importante)
+    duration_score = duration / 100.0  # Normalizar para escala razoável
+    
+    # Combinar frequência e duração
+    base_score = (frequency_score * duration_score)
+    
+    # Aplicar transformação logarítmica para suavizar
+    intensity_score = math.log(1 + base_score) * 10
+    
+    return intensity_score
+
+def get_host_candidates(user: object, service: object) -> list:
+    """Obtém lista de candidatos para hospedar serviço."""
+    host_candidates = []
+    
+    available_servers = [s for s in EdgeServer.all() 
+                        if s.status == "available" and get_normalized_free_capacity(s) > 0]
+    
+    for edge_server in available_servers:
+        # Calcular delay e violações SLA
+        path_delay = calculate_path_delay(
+            origin_network_switch=user.base_station.network_switch, 
+            target_network_switch=edge_server.network_switch
+        )
+        # Adicionar delay wireless
+        wireless_delay = getattr(user.base_station, 'wireless_delay')
+        overall_delay = wireless_delay + path_delay
+
+        sla_violations = 1 if overall_delay > user.delay_slas[str(service.application.id)] else 0
+        
+        # Calcular métricas do servidor
+        trust_cost = get_server_trust_cost(edge_server)
+        user_access_patterns = user.access_patterns[str(service.application.id)]
+        service_expected_duration = user_access_patterns.duration_values[0]
+        conditional_reliability = get_server_conditional_reliability(edge_server, service_expected_duration)
+        power_consumption = edge_server.power_model_parameters["max_power_consumption"]
+        
+        # Calcular camadas não-cached
+        service_image = ContainerImage.find_by(attribute_name="digest", attribute_value=service.image_digest)
+        service_layers = [ContainerLayer.find_by(attribute_name="digest", attribute_value=digest) 
+                         for digest in service_image.layers_digests]
+        
+        amount_of_uncached_layers = 0
+        for service_layer in service_layers:
+            is_cached = any(cached_layer.digest == service_layer.digest 
+                           for cached_layer in edge_server.container_layers)
+            if not is_cached:
+                amount_of_uncached_layers += service_layer.size
+        
+        host_candidates.append({
+            "object": edge_server,
+            "sla_violations": sla_violations,
+            "trust_cost": trust_cost,
+            "conditional_reliability": conditional_reliability,
+            "power_consumption": power_consumption,
+            "overall_delay": overall_delay,
+            "amount_of_uncached_layers": amount_of_uncached_layers,
+            "free_capacity": get_normalized_free_capacity(edge_server),
+        })
+    
+    return host_candidates
+
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
+def is_ongoing_failure(server, current_step=None):
+    """Verifica se servidor tem falha em andamento."""
+    if current_step is None:
+        current_step = server.model.schedule.steps
+    
+    if not server.failure_model.failure_history:
+        return False
+    
+    flatten_failure_trace = [item for failure_group in server.failure_model.failure_trace for item in failure_group]
+    
+    ongoing_failure = next(
+        (failure for failure in flatten_failure_trace
+         if failure["failure_starts_at"] <= current_step < failure["becomes_available_at"]),
+        None,
+    )
+    
+    return ongoing_failure is not None
+
+def is_making_request(user, current_step):
+    """Verifica se usuário está fazendo nova requisição."""
+    for app in user.applications:
+        last_access = user.access_patterns[str(app.id)].history[-1]
+        if current_step == last_access["start"]:
+            return True
+    return False
+
+def get_application_downtime(application):
+    """Calcula downtime da aplicação durante simulação."""
+    return sum(1 for status in application.availability_history if status is False)
+
+def get_application_uptime(application):
+    """Calcula uptime da aplicação durante simulação."""
+    return sum(1 for status in application.availability_history if status is True)
+
+def get_user_perceived_downtime(application):
+    """Calcula downtime percebido pelo usuário."""
+    return get_user_perceived_downtime_count(application)
+
+
+# ============================================================================
+# DISPLAY AND MONITORING FUNCTIONS
+# ============================================================================
+
+def display_simulation_metrics(simulation_parameters):
+    """Exibe métricas detalhadas da simulação."""
+    current_step = simulation_parameters.get("current_step")
+    
+    # Métricas de servidores
+    server_metrics = {}
+    for server in EdgeServer.all():
+        server_metrics[f"Server {server.id}"] = {
+            "Risk Cost": get_server_trust_cost(server),
+            "Simulation Uptime": get_server_uptime_simulation(server),
+            "Simulation Downtime": get_server_downtime_simulation(server),
+            "History Uptime": get_server_uptime_history(server),
+            "History Downtime": get_server_downtime_history(server),
+            "MTBF": get_server_mtbf(server),
+            "MTTR": get_server_mttr(server),
+            "Failure Rate": get_server_failure_rate(server),
+            "Reliability_10": get_server_conditional_reliability(server, 10),
+            "Reliability_60": get_server_conditional_reliability(server, 60),
+            "Time Since Last Repair": get_time_since_last_repair(server),
+            "Total Failures": get_server_total_failures(server)
+        }
+    
+    # Métricas de aplicações
+    application_metrics = {}
+    for application in Application.all():
+        application_metrics[f"Application {application.id}"] = {
+            "Uptime": get_application_uptime(application),
+            "Downtime": get_application_downtime(application)
+        }
+    
+    # Métricas de usuários
+    user_metrics = {}
+    total_perceived_downtime = 0
+    for user in User.all():
+        user_entry = {}
+        for application in user.applications:
+            perceived_downtime = get_user_perceived_downtime(application)
+            user_entry[f"Application {application.id} Perceived Downtime"] = perceived_downtime
+            total_perceived_downtime += perceived_downtime
+        user_metrics[f"User {user.id}"] = user_entry
+    
+    # # Métricas da fila de espera
+    # waiting_queue_metrics = {
+    #     "Total Applications in Queue": len(_waiting_queue),
+    #     "Applications by Priority": {}
+    # }
+    
+    # if _waiting_queue:
+    #     priorities = {}
+    #     for item in _waiting_queue:
+    #         priority = int(item["priority_score"] // 100)  # Agrupa por centenas
+    #         priorities[priority] = priorities.get(priority, 0) + 1
+    #     waiting_queue_metrics["Applications by Priority"] = priorities
+    
+    metrics = {
+        "Simulation Parameters": simulation_parameters,
+        "Infrastructure": f"{Application.count()}/{Service.count()}/{User.count()}/{EdgeServer.count()}",
+        #"Waiting Queue": waiting_queue_metrics,
+        "Server Metrics": server_metrics,
+        "Application Metrics": application_metrics,
+        "User Perceived Downtime": user_metrics,
+    }
+    
+    print(dumps(metrics, indent=4))
+    print(f"Total Perceived Downtime: {total_perceived_downtime}")
+
+def display_reliability_metrics(parameters: dict = {}):
+    """Exibe resumo das métricas de confiabilidade."""
+    current_step = parameters.get("current_step")
+    
+    print(f"\n\nStep: {current_step}")
+    print("=" * 125)
+    print("MÉTRICAS DOS SERVIDORES DISPONÍVEIS".center(125))
+    print("=" * 125)
+    
+    available_servers = [s for s in EdgeServer.all() if s.status == "available"]
+    servers = sorted(available_servers, key=lambda s: get_server_trust_cost(s))
+    
+    # Cabeçalho
+    header = f"{'Rank':^5}|{'ID':^5}|{'Status':^10}|{'Custo Risco':^12}|{'Taxa Falha':^12}|{'T.Últ.Rep':^10}|{'MTBF':^10}|{'MTTR':^8}|{'Falhas':^8}|{'Conf.10':^8}|{'Conf.60':^8}|"
+    print(header)
+    print("-" * 125)
+    
+    for rank, server in enumerate(servers, 1):
+        mtbf = get_server_mtbf(server)
+        time_since_repair = get_time_since_last_repair(server)
+        risk_cost = get_server_trust_cost(server)
+        
+        # Formatação especial para valores infinitos
+        mtbf_str = "∞" if mtbf == float("inf") else f"{mtbf:.2f}"
+        time_repair_str = "Never" if time_since_repair == float("inf") else f"{time_since_repair:.2f}"
+        risk_cost_str = "Mínimo" if risk_cost == 0 else f"{risk_cost:.4f}"
+        
+        row = f"{rank:^5}|{server.id:^5}|{server.status:^10}|{risk_cost_str:^12}|{get_server_failure_rate(server):^12.6f}|{time_repair_str:^10}|{mtbf_str:^10}|{get_server_mttr(server):^8.2f}|{get_server_total_failures(server):^8}|{get_server_conditional_reliability(server, 10):^8.2f}|{get_server_conditional_reliability(server, 60):^8.2f}|"
+        print(row)
+
+def display_application_info():
+    """Exibe informações sobre aplicações e servidores."""
+    print("\n" + "=" * 50)
+    print("INFORMAÇÕES DE APLICAÇÕES E SERVIDORES".center(50))
+    print("=" * 50)
+    
+    header = f"{'App ID':^12}|{'Server ID':^12}|{'User ID':^12}|{'Status':^10}"
+    print(header)
+    print("-" * 50)
+    
+    for application in Application.all():
+        service = application.services[0] if application.services else None
+        server_id = service.server.id if service and service.server else "N/A"
+        
+        users = application.users
+        if users:
+            for user in users:
+                status = "Online" if application.availability_status else "Offline"
+                row = f"{application.id:^12}|{server_id:^12}|{user.id:^12}|{status:^10}"
+                print(row)
+        else:
+            status = "Online" if application.availability_status else "Offline"
+            row = f"{application.id:^12}|{server_id:^12}|{'N/A':^12}|{status:^10}"
+            print(row)
+
+
+# ============================================================================
+# INFRASTRUCTURE COLLECTION FUNCTIONS
+# ============================================================================
 def get_infrastructure_usage_metrics() -> dict:
     """Method that collects a set of infrastructure metrics."""
     

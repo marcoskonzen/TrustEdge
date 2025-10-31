@@ -98,6 +98,7 @@ def edge_server_step(self):
                 if service.server == self:
                     service._available = False
                     service.server = None
+                    self.services.remove(service)
                     
 
                 service_has_migrations = len(service._Service__migrations) > 0
