@@ -1,6 +1,0 @@
-{
-    "github.copilot.chat.codesearch.enabled": true,
-    "python.analysis.enablePytestSupport": false,
-    "python.analysis.supportAllPythonDocuments": false,
-    "python.analysis.diagnosticsSource": "Pylance"
-}
