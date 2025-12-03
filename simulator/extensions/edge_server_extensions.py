@@ -30,7 +30,6 @@ def edge_server_step(self):
             "no_failure_has_occurred": no_failure_has_occurred,
             "last_failure_that_occurred_is_the_last_planned": last_failure_that_occurred_is_the_last_planned,
         }
-        #print(f"\n\n\n[STEP {self.model.schedule.steps}] {metadata}")
 
         if no_failure_has_occurred or last_failure_that_occurred_is_the_last_planned:
             interval_between_sets = randint(
@@ -38,8 +37,6 @@ def edge_server_step(self):
                 b=self.failure_model.failure_characteristics["interval_between_sets"]["upper_bound"],
             )
             next_failure_time_step = self.failure_model.failure_trace[-1][-1]["becomes_available_at"] + interval_between_sets
-
-            # print(f"[STEP {self.model.schedule.steps}] Generating failure set for {self} with next_failure_time_step: {next_failure_time_step}")
             self.failure_model.generate_failure_set(next_failure_time_step=next_failure_time_step)
 
         # Filtering the failure history to get the ongoing failure (if any)
@@ -52,7 +49,6 @@ def edge_server_step(self):
             ),
             None,
         )
-        #print(f"\n\n\n[STEP {self.model.schedule.steps}] {ongoing_failure} for {self}\n\n\n")
         
         # Updating the server status based on the ongoing failure status (if any)
         if ongoing_failure is not None:
@@ -67,22 +63,20 @@ def edge_server_step(self):
                 self.available = False
 
             # Checking whether the server status should be changed from "booting" to "available"
-            # and append ongoing_failure to the failure history.
             elif self.status == "booting" and current_step >= ongoing_failure["becomes_available_at"]:
                 self.status = "available"
                 self.available = True
                 if ongoing_failure not in self.failure_model.failure_history:
                     self.failure_model.failure_history.append(ongoing_failure)
-                    #print(f"\n\n\n[STEP {current_step}] {ongoing_failure} added to failure history of {self}\n\n\n")
         else:
             # If there is no ongoing failure, we can consider the server as healthy
             self.status = "available"
             self.available = True
-            #print(f"[STEP {self.model.schedule.steps}] No ongoing failure for {self}")
 
         if self.status == "available":
             for service in self.services:
-                service._available = True
+                if not service.being_provisioned:
+                    service._available = True
 
         # Interrupting any ongoing service provisioning processes attached to the server if it is not available
         else:
@@ -93,39 +87,36 @@ def edge_server_step(self):
             for flow in self.download_queue:
                 flow.data_to_transfer = 0
                 flow.status = "interrupted"
+            
+            # Limpar download_queue após interromper
+            self.download_queue = []
 
+            # Marcar serviços deste servidor como indisponíveis
+            for service in list(self.services):
+                service._available = False
+
+            # ✅ MARCAR MIGRAÇÕES PARA CANCELAMENTO (já existente)
             for service in Service.all():
-                if service.server == self:
-                    service._available = False
-                    service.server = None
-                    self.services.remove(service)
-                    
+                if not hasattr(service, '_Service__migrations') or len(service._Service__migrations) == 0:
+                    continue
+                
+                migration = service._Service__migrations[-1]
+                
+                # Pular migrações já finalizadas
+                if migration.get("end") is not None:
+                    continue
+                
+                target = migration.get("target")
+                
+                # Se este servidor é DESTINO da migração → Marcar para cancelamento
+                if target == self:
+                    migration["_pending_cancellation"] = True
+                    migration["_cancellation_reason"] = "target_server_failed"
+                    print(f"[EDGE_SERVER] Migração do serviço {service.id} MARCADA para cancelamento (target falhou)")
 
-                service_has_migrations = len(service._Service__migrations) > 0
-                if service_has_migrations:
-                    migration = service._Service__migrations[-1]
-                    if migration["origin"] == self or migration["target"] == self:
-                        # Interrupting the ongoing service migration
-                        migration["status"] = "interrupted"
-                        migration["end"] = current_step
-
-                        # Updating the service's origin and target servers metadata
-                        migration["target"].ongoing_migrations -= 1
-                        if service.server:
-                            service.server.ongoing_migrations -= 1
-
-                        # Updating the service's availability status if it was being hosted by the server
-                        service.being_provisioned = False
-                        if service.server == self:
-                            service._available = False
-
-                            # Changing the routes used to communicate the application that owns the service to its users
-                            app = service.application
-                            users = app.users
-                            for user in users:
-                                user.set_communication_path(app)
-
-            # Resetting the server's CPU and memory demand
+            # ═══════════════════════════════════════════════════════════════
+            # ✅ PASSO 3: ZERAR RECURSOS (DEPOIS DE LIMPAR ÓRFÃOS)
+            # ═══════════════════════════════════════════════════════════════
             self.cpu_demand = 0
             self.memory_demand = 0
 
@@ -136,15 +127,12 @@ def edge_server_step(self):
         # Gathering the list of registries that have the layer
         registries_with_layer = []
         for registry in [reg for reg in ContainerRegistry.all() if reg.available]:
-            # Checking if the registry is hosted on a valid host in the infrastructure and if it has the layer we need to pull
             if registry.server and any(layer.digest == l.digest for l in registry.server.container_layers):
-                # Selecting a network path to be used to pull the layer from the registry
                 path = nx.shortest_path(
                     G=self.model.topology,
                     source=registry.server.base_station.network_switch,
                     target=self.base_station.network_switch,
                 )
-
                 registries_with_layer.append({"object": registry, "path": path})
 
         # Selecting the registry from which the layer will be pulled to the (target) edge server

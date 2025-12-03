@@ -1,7 +1,7 @@
 # Importing EdgeSimPy components
 from edge_sim_py.components.base_station import BaseStation
 
-def step(self):
+def user_step(self):
     """Method that executes the events involving the object at each time step."""
     # Updating user access
     current_step = self.model.schedule.steps + 1
@@ -31,12 +31,12 @@ def step(self):
             self.access_patterns[str(app.id)].get_next_access(start=current_step + 1)
 
     # Re-executing user's mobility model in case no future mobility track is known by the simulator
-    if len(self.coordinates_trace) <= self.model.schedule.steps:
+    if len(self.coordinates_trace) <= current_step:
         self.mobility_model(self)
 
     # Updating user's location
-    if self.coordinates != self.coordinates_trace[self.model.schedule.steps]:
-        self.coordinates = self.coordinates_trace[self.model.schedule.steps]
+    if self.coordinates != self.coordinates_trace[current_step]:
+        self.coordinates = self.coordinates_trace[current_step]
 
         # Connecting the user to the closest base station
         self.base_station = BaseStation.find_by(attribute_name="coordinates", attribute_value=self.coordinates)
@@ -44,9 +44,10 @@ def step(self):
         for application in self.applications:
             # Only updates the routing path of apps available (i.e., whose services are available)
             services_available = len([s for s in application.services if s._available])
+            #print(f"Service available: {services_available}")
             if services_available == len(application.services):
                 # Recomputing user communication paths
                 self.set_communication_path(app=application)
             else:
                 self.communication_paths[str(application.id)] = []
-                self._compute_delay(app=application)
+                #self._compute_delay(app=application)

@@ -151,13 +151,13 @@ partially_connected_hexagonal_mesh(
         {
             "number_of_objects": 1776,
             "delay": 3,
-            "bandwidth": 12.5,
+            "bandwidth": 20,
             "transmission_delay": 0.06,  # Value in seconds
         },
     ],
 )
 
-SERVERS_PER_SPEC = 6
+SERVERS_PER_SPEC = 10
 edge_server_specifications = [
     {
         "number_of_objects": SERVERS_PER_SPEC,
@@ -170,7 +170,7 @@ edge_server_specifications = [
         # Failure-related parameters:
         "time_to_boot": 10,
         "initial_failure_time_step": randint(1, 20),
-        "number_of_failures": {"lower_bound": 1, "upper_bound": 5},
+        "number_of_failures": {"lower_bound": 2, "upper_bound": 7},
         "failure_duration": {"lower_bound": 50, "upper_bound": 100},
         "interval_between_failures": {"lower_bound": 10, "upper_bound": 30},
         "interval_between_sets": {"lower_bound": 10, "upper_bound": 30},
@@ -185,7 +185,7 @@ edge_server_specifications = [
         "max_power_consumption": 1387,
         # Failure-related parameters:
         "time_to_boot": 10,
-        "initial_failure_time_step": randint(1, 30),
+        "initial_failure_time_step": randint(1, 50),
         "number_of_failures": {"lower_bound": 2, "upper_bound": 4},
         "failure_duration": {"lower_bound": 10, "upper_bound": 50},
         "interval_between_failures": {"lower_bound": 100, "upper_bound": 200},
@@ -200,10 +200,10 @@ edge_server_specifications = [
         "static_power_percentage": 45 / 276,
         "max_power_consumption": 276,
         # Failure-related parameters:
-        "time_to_boot": 10,
-        "initial_failure_time_step": randint(1, 30),
+        "time_to_boot": 5,
+        "initial_failure_time_step": randint(1, 100),
         "number_of_failures": {"lower_bound": 1, "upper_bound": 2},
-        "failure_duration": {"lower_bound": 10, "upper_bound": 30},
+        "failure_duration": {"lower_bound": 10, "upper_bound": 20},
         "interval_between_failures": {"lower_bound": 150, "upper_bound": 250},
         "interval_between_sets": {"lower_bound": 150, "upper_bound": 250},
     },
@@ -273,7 +273,7 @@ for spec in edge_server_specifications:
                 "interval_between_failures": spec["interval_between_failures"],
                 "interval_between_sets": spec["interval_between_sets"],
             },
-            number_of_failure_groups_to_create=20 if server.model_name != "Jetson TX2" else 0,  # The Jetson TX2 server will never fail
+            number_of_failure_groups_to_create=50 if server.model_name != "Jetson TX2" else 0,  # The Jetson TX2 server will never fail
         )
         # Creating the failure history (only for failures that started before the simulation began - "becomes_available_at" < 0)
         # and defining status and availability according to failure history.
@@ -391,6 +391,102 @@ for index, registry_spec in enumerate(container_registry_specifications):
 
     # Creating the registry object
     provision_container_registry(container_registry_specification=registries[index], server=registry_host)
+    
+    # Coletar TODAS as imagens template disponíveis
+    all_template_images = [img for img in ContainerImage.all()]
+    
+    # Mostrar as imagens
+    for img in all_template_images:
+        print(f"  - {img.name}:{img.tag} (digest: {img.digest[:12]}..., {len(img.layers_digests)} camadas)")
+    
+    # Coletar TODAS as camadas únicas de todas as imagens
+    all_unique_layers = {}
+    
+    for template_image in all_template_images:
+        for layer_digest in template_image.layers_digests:
+            if layer_digest not in all_unique_layers:
+                # Buscar a camada template original
+                template_layer = ContainerLayer.find_by(attribute_name="digest", attribute_value=layer_digest)
+                if template_layer:
+                    all_unique_layers[layer_digest] = template_layer
+    
+    layers_added = 0
+    layers_skipped = 0
+    total_size_added = 0
+    
+    for layer_digest, template_layer in all_unique_layers.items():
+        # Verificar se camada já existe no servidor
+        layer_exists = any(
+            l.digest == layer_digest 
+            for l in registry_host.container_layers
+        )
+        
+        if not layer_exists:
+            # Criar nova instância da camada no servidor do Registry
+            registry_layer = ContainerLayer(
+                digest=template_layer.digest,
+                size=template_layer.size,
+                instruction=template_layer.instruction,
+            )
+            
+            if hasattr(registry_host, 'model') and registry_host.model:
+                registry_host.model.initialize_agent(agent=registry_layer)
+            
+            # Marcar a camada como pertencente ao servidor
+            registry_layer.server = registry_host
+            
+            # Adicionar ao servidor do Registry
+            registry_host.container_layers.append(registry_layer)
+            
+            # Reservar espaço em disco
+            registry_host.disk_demand += registry_layer.size
+            
+            layers_added += 1
+            total_size_added += registry_layer.size
+            
+            # Log detalhado apenas para as primeiras 5 camadas
+            if layers_added <= 5:
+                print(f"  [{layers_added:3d}] ✓ {layer_digest[:12]}... ({registry_layer.size:6.2f} MB) - {registry_layer.instruction}")
+        else:
+            layers_skipped += 1
+            if layers_skipped <= 3:
+                print(f"        - {layer_digest[:12]}... (já existe)")
+    
+    # Mostrar resumo
+    if layers_added > 5:
+        print(f"  ... ({layers_added - 5} camadas adicionais)")
+    
+    print(f"\n[REGISTRY_SETUP] {'='*80}")
+    print(f"[REGISTRY_SETUP] RESUMO DA POPULAÇÃO:")
+    print(f"  ✓ Camadas ADICIONADAS: {layers_added}")
+    print(f"  - Camadas JÁ EXISTENTES: {layers_skipped}")
+    print(f"  = TOTAL no servidor: {len(registry_host.container_layers)}")
+    print(f"  📦 Tamanho adicionado: {total_size_added:.2f} MB")
+    print(f"  💾 Disk demand: {registry_host.disk_demand:.2f} MB / {registry_host.disk} MB ({(registry_host.disk_demand/registry_host.disk)*100:.1f}%)")
+    print(f"{'='*80}")
+    
+    # ✅ VALIDAÇÃO: Verificar se todas as imagens têm suas camadas
+    print(f"\n[REGISTRY_VALIDATION] Validando integridade das imagens...")
+    
+    all_valid = True
+    for img in registry_host.container_images:
+        missing_layers = []
+        for layer_digest in img.layers_digests:
+            if not any(l.digest == layer_digest for l in registry_host.container_layers):
+                missing_layers.append(layer_digest[:12])
+        
+        if missing_layers:
+            print(f"  ⚠️ {img.name}:{img.tag} - FALTAM {len(missing_layers)} camadas: {missing_layers}")
+            all_valid = False
+        else:
+            print(f"  ✓ {img.name}:{img.tag} - COMPLETA ({len(img.layers_digests)} camadas)")
+    
+    if all_valid:
+        print(f"\n[REGISTRY_VALIDATION] ✅ TODAS AS IMAGENS ESTÃO COMPLETAS!")
+    else:
+        print(f"\n[REGISTRY_VALIDATION] ⚠️ ALGUMAS IMAGENS ESTÃO INCOMPLETAS!")
+    
+    print(f"{'='*80}\n")
 
 # 3GPP. “5G; Service requirements for the 5G system (3GPP TS 22.261 version 16.16.0 Release 16)”,
 # Technical specification (ts), 3rd Generation Partnership Project (3GPP), 2022, 72p.
@@ -412,13 +508,13 @@ TOTAL_USERS_APPS_SERVICES = len(service_image_specifications) * SERVICES_PER_SPE
 access_pattern_specifications = [
     {
         "class": CircularDurationAndIntervalAccessPattern,
-        "duration_values": [10, 10],  # How long the user will access the application at each call (Short-lived applications)
-        "interval_values": [120, 120],  # Interval (in time steps) between the user accesses
+        "duration_values": [10, 20],  # How long the user will access the application at each call (Short-lived applications)
+        "interval_values": [40, 50],  # Interval (in time steps) between the user accesses
     },
     {
         "class": CircularDurationAndIntervalAccessPattern,
-        "duration_values": [60, 60],  # How long the user will access the application at each call (Long-lived applications)
-        "interval_values": [40, 40],  # Interval (in time steps) between the user accesses
+        "duration_values": [60, 100],  # How long the user will access the application at each call (Long-lived applications)
+        "interval_values": [100, 120],  # Interval (in time steps) between the user accesses
     },
 ]
 service_demands = [
@@ -453,7 +549,7 @@ for instance_index, service_spec in enumerate(service_image_specification_values
 
     # Defining the user's access pattern
     user_access_pattern = access_pattern_specification_values[instance_index]
-    start = randint(1, 20)  # Randomizing the time step when the user will start accessing the application
+    start = randint(2, 30)  # Randomizing the time step when the user will start accessing the application
     user_access_pattern["class"](
         user=user,
         app=app,
@@ -496,6 +592,32 @@ for index, service in enumerate(services_sorted_randomly):
     service.memory_demand = service_demand_values[index]["memory_demand"]
     service._available = True
     service.being_provisioned = False
+
+# Armazenando todas as imagens templates disponíveis no Registry
+    
+# Coletar TODAS as imagens disponíveis (templates)
+all_template_images = [img for img in ContainerImage.all()]
+
+# Para cada imagem template, criar uma instância no Registry
+for template_image in all_template_images:
+    # Verificar se imagem já existe no Registry
+    image_exists = any(
+        img.digest == template_image.digest 
+        for img in registry_host.container_images
+    )
+    
+    if not image_exists:
+        # Criar nova instância da imagem no Registry
+        registry_image = ContainerImage()
+        registry_image.name = template_image.name
+        registry_image.digest = template_image.digest
+        registry_image.tag = template_image.tag
+        registry_image.architecture = template_image.architecture
+        registry_image.layers_digests = copy.deepcopy(template_image.layers_digests)
+        registry_image.server = registry_host
+        
+        # Adicionar ao Registry
+        registry_host.container_images.append(registry_image)
 
 # Defining the initial service placement
 randomized_closest_fit()

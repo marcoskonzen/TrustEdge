@@ -8,6 +8,8 @@ from .trust_edge_v1 import trust_edge_v1
 from .trust_edge_v2 import trust_edge_v2
 from .trust_edge_v3 import trust_edge_v3
 from .trust_edge_original import trust_edge_original
+from .kubernetes_inspired import kubernetes_inspired
+from .trust_edge_v3 import add_to_waiting_queue
 
 __all__ = [
     "toy_algorithm",
@@ -15,4 +17,6 @@ __all__ = [
     "trust_edge_v1",
     "trust_edge_v2",
     "trust_edge_v3",
+    "kubernetes_inspired",
+    "add_to_waiting_queue",
 ]

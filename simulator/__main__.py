@@ -7,6 +7,7 @@ import argparse
 
 # Importing EdgeSimPy components
 from edge_sim_py import *
+from edge_sim_py.components.service import *
 
 # Importing helper functions
 from simulator.helper_functions import *
@@ -19,14 +20,19 @@ from simulator.algorithms import *
 def load_edgesimpy_extensions():
     """Loads EdgeSimPy extensions"""
     # Loading the entity extensions
+    Service.step = service_step
     EdgeServer.step = edge_server_step
+    Application.step = application_step
+    User.step = user_step
+    
+    # Propriedades adicionais
     EdgeServer.failure_history = failure_history
     EdgeServer.available_history = available_history
-
-    Application.step = application_step
     Application.availability_status = availability_status
     Application.availability_history = availability_history
     Application.downtime_history = downtime_history
+
+  
 
 def main(parameters: dict):
     # Defining a seed value to enable reproducible results

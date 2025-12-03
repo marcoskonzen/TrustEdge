@@ -162,39 +162,58 @@ class SimulationMetrics:
         total_violations_per_delay_sla = {}
 
         for user in User.all():
-            
             for app in user.applications:
                 access_pattern = user.access_patterns[str(app.id)]
                 duration = access_pattern.duration_values[0]
                 delay_sla = user.delay_slas[str(app.id)]
 
-                if hasattr(app, 'downtime_history') and app.downtime_history:
-                    perceived_downtime = sum(1 for status in app.downtime_history if status)
-                    user_total_perceived_downtime += perceived_downtime
+                # Verificar se tem histórico de downtime
+                if not hasattr(user, 'user_perceived_downtime_history'):
+                    continue
+                    
+                if str(app.id) not in user.user_perceived_downtime_history:
+                    continue
+                
+                downtime_history = user.user_perceived_downtime_history[str(app.id)]
+                
+                # Contar APENAS os True (downtime percebido quando usuário tentou acessar)
+                perceived_downtime = sum(1 for status in downtime_history if status is True)
+                
+                # Debug para verificar
+                total_access_attempts = len(downtime_history)
+                successful_accesses = sum(1 for status in downtime_history if status is False)
+                
+                # print(f"[DEBUG METRICS] App {app.id}:")
+                # print(f"                Total access attempts: {total_access_attempts}")
+                # print(f"                Successful accesses: {successful_accesses}")
+                # print(f"                Downtime occurrences: {perceived_downtime}")
+                # print(f"                Downtime rate: {(perceived_downtime/total_access_attempts*100):.1f}%" if total_access_attempts > 0 else "                Downtime rate: 0%")
+                
+                user_total_perceived_downtime += perceived_downtime
 
                     
-                    if duration not in total_perceived_downtime_per_access_pattern:
-                        total_perceived_downtime_per_access_pattern[duration] = 0
-                    total_perceived_downtime_per_access_pattern[duration] += perceived_downtime
+                if duration not in total_perceived_downtime_per_access_pattern:
+                    total_perceived_downtime_per_access_pattern[duration] = 0
+                total_perceived_downtime_per_access_pattern[duration] += perceived_downtime
 
-                    
-                    if delay_sla not in total_perceived_downtime_per_delay_sla:
-                        total_perceived_downtime_per_delay_sla[delay_sla] = 0
-                    total_perceived_downtime_per_delay_sla[delay_sla] += perceived_downtime
+                
+                if delay_sla not in total_perceived_downtime_per_delay_sla:
+                    total_perceived_downtime_per_delay_sla[delay_sla] = 0
+                total_perceived_downtime_per_delay_sla[delay_sla] += perceived_downtime
 
-                    user_maximum_downtime_allowed = user.maximum_downtime_allowed[str(app.id)]
-                    
-                    if perceived_downtime > user_maximum_downtime_allowed:
-                        app_violation = 1
-                        total_violations_sla_downtime += app_violation
+                user_maximum_downtime_allowed = user.maximum_downtime_allowed[str(app.id)]
+                
+                if perceived_downtime > user_maximum_downtime_allowed:
+                    app_violation = 1
+                    total_violations_sla_downtime += app_violation
 
-                        if duration not in total_violations_per_access_pattern:
-                            total_violations_per_access_pattern[duration] = 0
-                        total_violations_per_access_pattern[duration] += app_violation
+                    if duration not in total_violations_per_access_pattern:
+                        total_violations_per_access_pattern[duration] = 0
+                    total_violations_per_access_pattern[duration] += app_violation
 
-                        if delay_sla not in total_violations_per_delay_sla:
-                            total_violations_per_delay_sla[delay_sla] = 0
-                        total_violations_per_delay_sla[delay_sla] += app_violation
+                    if delay_sla not in total_violations_per_delay_sla:
+                        total_violations_per_delay_sla[delay_sla] = 0
+                    total_violations_per_delay_sla[delay_sla] += app_violation
 
                 
 
@@ -488,7 +507,12 @@ def get_delay(wireless_delay: int, origin_switch: object, target_switch: object)
     """
     topology = origin_switch.model.topology
 
-    path = get_shortest_path(origin_switch=origin_switch, target_switch=target_switch)
+    path = nx.shortest_path(
+        G=topology,
+        source=origin_switch,
+        target=target_switch,
+        weight="delay",
+    )
     delay = wireless_delay + topology.calculate_path_delay(path=path)
 
     return delay
@@ -570,7 +594,7 @@ def randomized_closest_fit():
             image.server = service.server
             service.server.container_images.append(image)
 
-
+                    
 def show_scenario_overview():
     print("\n\n")
     print("======================")
@@ -596,14 +620,26 @@ def show_scenario_overview():
         user = application.users[0]
         service = application.services[0]
         image = ContainerImage.find_by(attribute_name="digest", attribute_value=service.image_digest)
-        application_metadata = {
-            "delay_sla": user.delay_slas[str(application.id)],
-            "delay": user.delays[str(application.id)],
-            "image": image.name,
-            "state": service.state,
-            "demand": [service.cpu_demand, service.memory_demand],
-            "host": f"{service.server}. Model: {service.server.model_name} ({service.server.status})",
-        }
+        if service.server:
+            application_metadata = {
+                "delay_sla": user.delay_slas[str(application.id)],
+                "delay": user.delays[str(application.id)],
+                "image": image.name,
+                "state": service.state,
+                "demand": [service.cpu_demand, service.memory_demand],
+                "host": f"{service.server}. Model: {service.server.model_name} ({service.server.status})",
+            }
+        
+        else:
+            application_metadata = {
+                "delay_sla": user.delay_slas[str(application.id)],
+                "delay": user.delays[str(application.id)],
+                "image": image.name,
+                "state": service.state,
+                "demand": [service.cpu_demand, service.memory_demand],
+                "host": "Not placed",
+            }
+        
         print(f"\t{application}. {application_metadata}")
 
     print("\n\n")
@@ -803,20 +839,81 @@ def provision(user: object, application: object, service: object, edge_server: o
         layer.server = edge_server
         edge_server.container_layers.append(layer)
 
-    path_delay = calculate_path_delay(
-            origin_network_switch=user.base_station.network_switch, 
-            target_network_switch=edge_server.network_switch
-        )
-    # Adicionar delay wireless
-    wireless_delay = getattr(user.base_station, 'wireless_delay')
-    user.delays[str(application.id)] = wireless_delay + path_delay
+    # path_delay = calculate_path_delay(
+    #         origin_network_switch=user.base_station.network_switch, 
+    #         target_network_switch=edge_server.network_switch
+    #     )
+    # # Adicionar delay wireless
+    # wireless_delay = getattr(user.base_station, 'wireless_delay')
+    # user.delays[str(application.id)] = wireless_delay + path_delay
     
-    # user.set_communication_path(app=application)
-    # new_delay = user._compute_delay(app=application, metric="latency")
-    # user.delays[str(application.id)] = new_delay
+    # path_delay = get_delay(
+    #         wireless_delay=user.base_station.wireless_delay,
+    #         origin_switch=user.base_station.network_switch,
+    #         target_switch=edge_server.network_switch
+    #         )
+    
+    user.set_communication_path(app=application)
+    user._compute_delay(app=application, metric="latency")
 
     # DEBUG: Verificar se o delay foi atualizado
     print(f"[DEBUG] Delay pós-provisionamento App {application.id}: {user.delays[str(application.id)]}")
+
+def deprovision_service(service, reason):
+    """Libera recursos e remove o serviço da infraestrutura."""
+    server = service.server
+    if server is None and not hasattr(service, "_pending_origin_server"):
+        return False
+
+    print(f"[LOG] Desprovisionando serviço {service.id} do servidor {server.id if server else 'None'}")
+    print(f"      Razão: {reason}")
+
+    # Remover do servidor atual
+    if server:
+        cpu_before = server.cpu - server.cpu_demand
+        mem_before = server.memory - server.memory_demand
+
+        if service in server.services:
+            server.services.remove(service)
+
+        server.cpu_demand = max(0, server.cpu_demand - service.cpu_demand)
+        server.memory_demand = max(0, server.memory_demand - service.memory_demand)
+
+        cpu_after = server.cpu - server.cpu_demand
+        mem_after = server.memory - server.memory_demand
+
+        print(f"[LOG] ✓ Removido da lista do servidor {server.id}")
+        print(f"[LOG] Recursos do servidor de origem {server.id}:")
+        print(f"      ANTES: CPU disponível={cpu_before}, MEM disponível={mem_before}")
+        print(f"      LIBERADO: CPU={service.cpu_demand}, MEM={service.memory_demand}")
+        print(f"      DEPOIS: CPU disponível={cpu_after}, MEM disponível={mem_after}")
+
+    # Limpar residual no servidor de origem (quando migração cancelada)
+    pending_origin = getattr(service, "_pending_origin_server", None)
+    if pending_origin and pending_origin is not server:
+        if service in pending_origin.services:
+            pending_origin.services.remove(service)
+
+        pending_origin.cpu_demand = max(0, pending_origin.cpu_demand - service.cpu_demand)
+        pending_origin.memory_demand = max(0, pending_origin.memory_demand - service.memory_demand)
+
+        cpu_after = pending_origin.cpu - pending_origin.cpu_demand
+        mem_after = pending_origin.memory - pending_origin.memory_demand
+
+        print(f"[LOG] Recursos do servidor de origem {pending_origin.id}:")
+        print(f"      DEPOIS DO AJUSTE: CPU disponível={cpu_after}, MEM disponível={mem_after}")
+
+    # Limpar relacionamentos e flags
+    service.server = None
+    service._available = False
+    if hasattr(service, "_pending_deprovision"):
+        delattr(service, "_pending_deprovision")
+    if hasattr(service, "_deprovision_reason"):
+        delattr(service, "_deprovision_reason")
+    if hasattr(service, "_pending_origin_server"):
+        delattr(service, "_pending_origin_server")
+
+    return True
 
 
 def user_set_communication_path(self, app: object, communication_path: list = []) -> list:
@@ -928,15 +1025,16 @@ def get_sla_violations(user) -> dict:
     }
 
 
-def update_user_perceived_downtime_for_current_step():
+def update_user_perceived_downtime_for_current_step(current_step):
     """
     Atualiza o downtime percebido por todos os usuários no step atual.
     
-    REGRA: Downtime percebido = usuário está tentando acessar E aplicação indisponível
-    
     Esta função deve ser chamada UMA VEZ por step por cada algoritmo.
     """
-    current_step = User.first().model.schedule.steps + 1
+    print()
+    print("=" * 70)
+    print(f"[DEBUG_DOWNTIME] === MONITORANDO O DOWNTIME PERCEBIDO - STEP {current_step} ===")
+    print("=" * 70)
     
     for user in User.all():
         # Inicializar histórico se não existir
@@ -951,21 +1049,51 @@ def update_user_perceived_downtime_for_current_step():
                 user.user_perceived_downtime_history[app_id] = []
             
             # Verificar se usuário está fazendo requisição no step atual
-            is_making_request = user.making_requests[app_id][str(current_step)]
+            is_making_request = is_user_accessing_application(user, app, current_step)
             
+            # SÓ REGISTRAR HISTÓRICO QUANDO USUÁRIO ESTÁ FAZENDO REQUISIÇÃO
             if is_making_request:
-                # Verificar se aplicação está disponível
-                app_available = len([s for s in app.services if s._available]) == len(app.services)
+                service = app.services[0]
+                is_migrating = False
+                is_provisioning = False
+                app_available = True
+                
+                if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
+                    last_migration = service._Service__migrations[-1]
+
+                    if last_migration["end"] is None:
+                        if last_migration.get("origin") is None:
+                            is_provisioning = True
+                        else:
+                            is_migrating = True
+                
+                
+
+                if is_provisioning:
+                    app_available = False
+                    status = "PROVISIONAMENTO"
+                elif is_migrating:
+                    app_available = False
+                    status = "MIGRAÇÃO"
+                else:
+                    # Verificar disponibilidade normal
+                    for service in app.services:
+                        if service.server:
+                            if service.server.status != "available" or not service._available:
+                                app_available = False
+                                break
+                        else:
+                            app_available = False
+                            break
+                    status = "INDISPONÍVEL" if not app_available else "DISPONÍVEL"
+                
+                
+                user.user_perceived_downtime_history[app_id].append(not app_available)
                 
                 if not app_available:
-                    # DOWNTIME PERCEBIDO: usuário quer acessar mas app indisponível
-                    user.user_perceived_downtime_history[app_id].append(True)
+                    print(f"[DEBUG_DOWNTIME] App {app.id}: DOWNTIME PERCEBIDO ({status}) - Step {current_step}")
                 else:
-                    # Aplicação disponível - sem downtime percebido
-                    user.user_perceived_downtime_history[app_id].append(False)
-            else:
-                # Usuário não está tentando acessar - sem downtime percebido
-                user.user_perceived_downtime_history[app_id].append(False)
+                    print(f"[DEBUG_DOWNTIME] App {app.id} (server {service.server.id if service.server else 'None'}): {status} - Step {current_step}")
 
 
 def get_user_perceived_downtime_count(application):
@@ -1162,21 +1290,22 @@ def get_application_access_intensity_score(app: object) -> float:
 def get_host_candidates(user: object, service: object) -> list:
     """Obtém lista de candidatos para hospedar serviço."""
     host_candidates = []
-    
+
+    app = service.application
+    user = app.users[0]
+
     available_servers = [s for s in EdgeServer.all() 
                         if s.status == "available" and get_normalized_free_capacity(s) > 0]
     
     for edge_server in available_servers:
         # Calcular delay e violações SLA
-        path_delay = calculate_path_delay(
-            origin_network_switch=user.base_station.network_switch, 
-            target_network_switch=edge_server.network_switch
-        )
-        # Adicionar delay wireless
-        wireless_delay = getattr(user.base_station, 'wireless_delay')
-        overall_delay = wireless_delay + path_delay
-
-        sla_violations = 1 if overall_delay > user.delay_slas[str(service.application.id)] else 0
+        path_delay = get_delay(
+            wireless_delay=user.base_station.wireless_delay,
+            origin_switch=user.base_station.network_switch,
+            target_switch=edge_server.network_switch
+            )
+        
+        sla_violations = 1 if path_delay > user.delay_slas[str(service.application.id)] else 0
         
         # Calcular métricas do servidor
         trust_cost = get_server_trust_cost(edge_server)
@@ -1203,7 +1332,7 @@ def get_host_candidates(user: object, service: object) -> list:
             "trust_cost": trust_cost,
             "conditional_reliability": conditional_reliability,
             "power_consumption": power_consumption,
-            "overall_delay": overall_delay,
+            "overall_delay": path_delay,
             "amount_of_uncached_layers": amount_of_uncached_layers,
             "free_capacity": get_normalized_free_capacity(edge_server),
         })

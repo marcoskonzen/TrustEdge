@@ -25,6 +25,7 @@ from .helper_functions import (
     
     # Provisioning and User Functions
     provision,
+    deprovision_service,
     user_set_communication_path,
     is_user_accessing_application,
     randomized_closest_fit,
@@ -95,6 +96,7 @@ __all__ = [
     
     # Provisioning and User Functions
     "provision",
+    "deprovision_service",
     "user_set_communication_path",
     "is_user_accessing_application",
     "randomized_closest_fit",
