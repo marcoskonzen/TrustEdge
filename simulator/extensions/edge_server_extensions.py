@@ -4,6 +4,7 @@
 from edge_sim_py.components.container_registry import ContainerRegistry
 from edge_sim_py.components.network_flow import NetworkFlow
 from edge_sim_py.components.service import Service
+from edge_sim_py.components.edge_server import EdgeServer
 
 # Importing Python modules
 import networkx as nx
@@ -89,7 +90,7 @@ def edge_server_step(self):
                 flow.status = "interrupted"
             
             # Limpar download_queue após interromper
-            self.download_queue = []
+            # self.download_queue = []
 
             # Marcar serviços deste servidor como indisponíveis
             for service in list(self.services):
@@ -124,31 +125,55 @@ def edge_server_step(self):
     while len(self.waiting_queue) > 0 and len(self.download_queue) < self.max_concurrent_layer_downloads:
         layer = self.waiting_queue.pop(0)
 
-        # Gathering the list of registries that have the layer
-        registries_with_layer = []
+        # Gathering the list of sources (Registries and Edge Servers) that have the layer
+        candidates = []
+
+        # 1. Check Container Registries (Fonte Original)
         for registry in [reg for reg in ContainerRegistry.all() if reg.available]:
             if registry.server and any(layer.digest == l.digest for l in registry.server.container_layers):
+                candidates.append(registry.server)
+
+        # 2. Check other Edge Servers (Peer-to-Peer / Edge Caching)
+        # Exclui o próprio servidor (self) e servidores indisponíveis
+        for server in [s for s in EdgeServer.all() if s.available and s.id != self.id]:
+            if any(layer.digest == l.digest for l in server.container_layers):
+                candidates.append(server)
+
+        # Calculating paths to candidates to find the closest one
+        candidates_with_path = []
+        for source_server in candidates:
+            try:
                 path = nx.shortest_path(
                     G=self.model.topology,
-                    source=registry.server.base_station.network_switch,
+                    source=source_server.base_station.network_switch,
                     target=self.base_station.network_switch,
                 )
-                registries_with_layer.append({"object": registry, "path": path})
+                candidates_with_path.append({"server": source_server, "path": path})
+            except nx.NetworkXNoPath:
+                continue
+        
+        if not candidates_with_path:
+            # Se a camada não for encontrada em lugar nenhum (erro crítico ou registry offline)
+            print(f"[EDGE_SERVER] ⚠️ Layer {layer.digest[:8]} not found in any available server.")
+            continue
 
-        # Selecting the registry from which the layer will be pulled to the (target) edge server
-        registries_with_layer = sorted(registries_with_layer, key=lambda r: len(r["path"]))
-        registry = registries_with_layer[0]["object"]
-        path = registries_with_layer[0]["path"]
+        # Selecting the closest source (shortest path / fewer hops)
+        # Isso satisfaz a condição: "o sentido mais próximo é o que levaria menos tempo"
+        candidates_with_path.sort(key=lambda r: len(r["path"]))
+        
+        best_candidate = candidates_with_path[0]
+        source_server = best_candidate["server"]
+        path = best_candidate["path"]
 
         # Creating the flow object
         flow = NetworkFlow(
             topology=self.model.topology,
-            source=registry.server,
+            source=source_server,
             target=self,
             start=self.model.schedule.steps + 1,
             path=path,
             data_to_transfer=layer.size,
-            metadata={"type": "layer", "object": layer, "container_registry": registry},
+            metadata={"type": "layer", "object": layer, "source_server": source_server},
         )
         self.model.initialize_agent(agent=flow)
 

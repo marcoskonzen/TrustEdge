@@ -22,9 +22,9 @@ from .helper_functions import (
     find_shortest_path,
     calculate_path_delay,
     sign,
+    get_path_bottleneck,
     
     # Provisioning and User Functions
-    provision,
     deprovision_service,
     user_set_communication_path,
     is_user_accessing_application,
@@ -58,9 +58,12 @@ from .helper_functions import (
     get_server_conditional_reliability,
     get_time_since_last_repair,
     get_server_trust_cost,
+    init_failure_reliability_tracking,
+    record_server_failure_reliability,
+    print_failure_reliability_summary,
     
     # Application Scoring Functions
-    get_application_delay_score,
+    get_application_delay_cost,
     get_application_access_intensity_score,
     get_host_candidates,
     
@@ -93,9 +96,9 @@ __all__ = [
     "find_shortest_path",
     "calculate_path_delay",
     "sign",
+    "get_path_bottleneck",
     
     # Provisioning and User Functions
-    "provision",
     "deprovision_service",
     "user_set_communication_path",
     "is_user_accessing_application",
@@ -129,9 +132,12 @@ __all__ = [
     "get_server_conditional_reliability",
     "get_time_since_last_repair",
     "get_server_trust_cost",
+    "init_failure_reliability_tracking",
+    "record_server_failure_reliability",
+    "print_failure_reliability_summary",
     
     # Application Scoring Functions
-    "get_application_delay_score",
+    "get_application_delay_cost",
     "get_application_access_intensity_score",
     "get_host_candidates",
     

@@ -7,6 +7,7 @@ import networkx as nx
 from json import dumps
 from random import sample, randint
 import math  # Adicionado para cálculos matemáticos mais precisos
+from math import isinf
 
 # Importing EdgeSimPy components
 from edge_sim_py import *
@@ -26,6 +27,9 @@ class SimulationMetrics:
         self.sla_violations = 0
         self.delay_violations_per_delay_sla = {}
         self.delay_violations_per_access_pattern = {}
+
+        # Downtime Reasons Metrics (NOVO)
+        self.downtime_reasons = {}
 
         # Infraestructure usage metrics
         self.total_overloaded_servers = 0
@@ -59,6 +63,12 @@ class SimulationMetrics:
             self.delay_violations_per_access_pattern[duration] = (
                 self.delay_violations_per_access_pattern.get(duration, 0) + violations
             )
+
+    def add_downtime_reason(self, reason):
+        """Incrementa o contador para um motivo específico de downtime."""
+        if reason not in self.downtime_reasons:
+            self.downtime_reasons[reason] = 0
+        self.downtime_reasons[reason] += 1
 
     def add_infrastructure_metrics(self, step_metrics):
         """Adiciona métricas de infraestrutura de um step às métricas globais."""
@@ -158,6 +168,7 @@ class SimulationMetrics:
         total_perceived_downtime_per_access_pattern = {}
         total_perceived_downtime_per_delay_sla = {}
         total_violations_sla_downtime = 0
+        apps_violations_sla_downtime = []
         total_violations_per_access_pattern = {}
         total_violations_per_delay_sla = {}
 
@@ -206,6 +217,7 @@ class SimulationMetrics:
                 if perceived_downtime > user_maximum_downtime_allowed:
                     app_violation = 1
                     total_violations_sla_downtime += app_violation
+                    apps_violations_sla_downtime.append(app.id)
 
                     if duration not in total_violations_per_access_pattern:
                         total_violations_per_access_pattern[duration] = 0
@@ -227,6 +239,7 @@ class SimulationMetrics:
             "total_perceived_downtime_per_access_pattern": dict(total_perceived_downtime_per_access_pattern),
             "total_perceived_downtime_per_delay_sla": dict(total_perceived_downtime_per_delay_sla),
             "total_downtime_sla_violations": total_violations_sla_downtime,
+            "apps_violations_sla_downtime": apps_violations_sla_downtime,   
             "downtime_violations_per_access_pattern": dict(total_violations_per_access_pattern),
             "downtime_violations_per_delay_sla": dict(total_violations_per_delay_sla),
 
@@ -239,6 +252,14 @@ class SimulationMetrics:
             "average_available_occupation_per_model": avg_available_occupation_per_model,
             "total_power_consumption": self.total_power_consumption,
             "total_power_consumption_per_model": total_power_per_model,
+
+            "=========== Downtime Analysis ===========": None,
+            "downtime_reasons": dict(self.downtime_reasons),
+
+            "=========== Infrastructure metrics ===========": None,
+            "total_servers_per_model": dict(self.total_servers_per_model),
+            "total_overloaded_servers": self.total_overloaded_servers,
+            "average_overall_occupation": avg_overall_occupation,
             
             
         }
@@ -807,58 +828,6 @@ def sign(value: int):
         return -1
     return 0
 
-
-def provision(user: object, application: object, service: object, edge_server: object):
-    """Provisions an application's service on an edge server.
-
-    Args:
-        user (object): User that accesses the application.
-        application (object): Application to whom the service belongs.
-        service (object): Service to be provisioned.
-        edge_server (object): Edge server that will host the edge server.
-    """
-    # Updating the host's resource usage
-    edge_server.cpu_demand += service.cpu_demand
-    edge_server.memory_demand += service.memory_demand
-
-    # Creating relationship between the host and the registry
-    service.server = edge_server
-    edge_server.services.append(service)
-
-    for layer_metadata in edge_server._get_uncached_layers(service=service):
-        layer = ContainerLayer(
-            digest=layer_metadata.digest,
-            size=layer_metadata.size,
-            instruction=layer_metadata.instruction,
-        )
-
-        # Updating host's resource usage based on the layer size
-        edge_server.disk_demand += layer.size
-
-        # Creating relationship between the host and the layer
-        layer.server = edge_server
-        edge_server.container_layers.append(layer)
-
-    # path_delay = calculate_path_delay(
-    #         origin_network_switch=user.base_station.network_switch, 
-    #         target_network_switch=edge_server.network_switch
-    #     )
-    # # Adicionar delay wireless
-    # wireless_delay = getattr(user.base_station, 'wireless_delay')
-    # user.delays[str(application.id)] = wireless_delay + path_delay
-    
-    # path_delay = get_delay(
-    #         wireless_delay=user.base_station.wireless_delay,
-    #         origin_switch=user.base_station.network_switch,
-    #         target_switch=edge_server.network_switch
-    #         )
-    
-    user.set_communication_path(app=application)
-    user._compute_delay(app=application, metric="latency")
-
-    # DEBUG: Verificar se o delay foi atualizado
-    print(f"[DEBUG] Delay pós-provisionamento App {application.id}: {user.delays[str(application.id)]}")
-
 def deprovision_service(service, reason):
     """Libera recursos e remove o serviço da infraestrutura."""
     server = service.server
@@ -969,6 +938,55 @@ def user_set_communication_path(self, app: object, communication_path: list = []
     return communication_path
 
 
+# ============================================================================
+# NETWORK AWARENESS HELPER (NEW)
+# ============================================================================
+
+def get_path_bottleneck(topology, source_node, target_node):
+    """
+    Calculates the available bandwidth (bottleneck) on the shortest path between two nodes.
+    Returns value in MB/s.
+    """
+    try:
+        # EdgeSimPy uses shortest path by default
+        path = nx.shortest_path(topology, source=source_node, target=target_node)
+        
+        min_available_bw = float('inf')
+        
+        # Iterate over links in the path
+        for i in range(len(path) - 1):
+            u = path[i]
+            v = path[i+1]
+            
+            # Get link data from NetworkX graph
+            edge_data = topology.get_edge_data(u, v)
+            
+            if edge_data:
+                # Try to access the NetworkLink object directly
+                link_obj = edge_data.get('object')
+                
+                if link_obj:
+                    # Real-time calculation: Capacity - Current Demand
+                    available = link_obj.bandwidth - link_obj.bandwidth_demand
+                else:
+                    # Fallback to metadata
+                    bandwidth = edge_data.get('bandwidth', 12.5) # Default 100Mbps = 12.5MB/s
+                    demand = edge_data.get('bandwidth_demand', 0)
+                    available = bandwidth - demand
+                
+                if available < min_available_bw:
+                    min_available_bw = available
+        
+        # If path is just the node itself (local), return infinite or max internal speed
+        if min_available_bw == float('inf'):
+            return 125.0 # 1000 Mbps (internal)
+            
+        return max(0.1, min_available_bw) # Avoid division by zero
+
+    except (nx.NetworkXNoPath, Exception):
+        return 0.1 # Return minimal bandwidth on error
+
+
 def is_user_accessing_application(user, application, current_step):
     """Verifica se usuário está acessando aplicação no step atual."""
     app_id = str(application.id)
@@ -1005,18 +1023,19 @@ def get_sla_violations(user) -> dict:
         delay = user._compute_delay(app=app, metric="latency")
         access_pattern = user.access_patterns[str(app.id)]
         duration = access_pattern.duration_values[0]
+        service = app.services[0]
         
-        # Calculating the number of delay SLA violations
-        if delay > delay_sla:
+        # ✅ Se está na fila (sem servidor) ou delay infinito, conta violação
+        if not service.server:
+            delay = float('inf')
+        else:
+            user.set_communication_path(app=app)
+            delay = user._compute_delay(app=app, metric="latency")
+
+        if delay > delay_sla or isinf(delay):
             delay_sla_violations += 1
-            
-            if delay_sla not in delay_violations_per_delay_sla:
-                delay_violations_per_delay_sla[delay_sla] = 0
-            delay_violations_per_delay_sla[delay_sla] += 1
-            
-            if duration not in delay_violations_per_access_pattern:
-                delay_violations_per_access_pattern[duration] = 0
-            delay_violations_per_access_pattern[duration] += 1
+            delay_violations_per_delay_sla[delay_sla] = delay_violations_per_delay_sla.get(delay_sla, 0) + 1
+            delay_violations_per_access_pattern[duration] = delay_violations_per_access_pattern.get(duration, 0) + 1
 
     return {
         'delay_sla_violations': delay_sla_violations,
@@ -1036,6 +1055,8 @@ def update_user_perceived_downtime_for_current_step(current_step):
     print(f"[DEBUG_DOWNTIME] === MONITORANDO O DOWNTIME PERCEBIDO - STEP {current_step} ===")
     print("=" * 70)
     
+    metrics = get_simulation_metrics()
+
     for user in User.all():
         # Inicializar histórico se não existir
         if not hasattr(user, "user_perceived_downtime_history"):
@@ -1049,51 +1070,72 @@ def update_user_perceived_downtime_for_current_step(current_step):
                 user.user_perceived_downtime_history[app_id] = []
             
             # Verificar se usuário está fazendo requisição no step atual
-            is_making_request = is_user_accessing_application(user, app, current_step)
+            is_making_access = is_user_accessing_application(user, app, current_step)
             
-            # SÓ REGISTRAR HISTÓRICO QUANDO USUÁRIO ESTÁ FAZENDO REQUISIÇÃO
-            if is_making_request:
-                service = app.services[0]
-                is_migrating = False
-                is_provisioning = False
-                app_available = True
+            service = app.services[0]
+            app_available = True
+            downtime_reason = None
+
+            # 1. Verificar se está na fila de espera (DOWNTIME)
+            # Se estiver na fila, consideramos downtime se o usuário estiver tentando acessar
+            # OU se for uma falha de servidor (interrupção de serviço contínuo)
+            waiting_reason = getattr(service, "_waiting_reason", None)
+            
+            if not service.server:
+                app_available = False
+                if waiting_reason == "server_failed":
+                    downtime_reason = "Waiting in Queue (Server Failure)"
+                else:
+                    downtime_reason = "Waiting in Global Queue (No Host)"
+            
+            # 2. Verificar se o servidor está falho (SÓ SE TIVER SERVIDOR)
+            elif service.server and service.server.status != "available":
+                app_available = False
+                waiting_reason = getattr(service, "_waiting_reason", None)
                 
+                if waiting_reason:
+                    downtime_reason = "Waiting in Queue"
+                else:
+                    downtime_reason = "Server Failure"
+            
+            # 3. Verificar flag de disponibilidade do serviço (Provisionamento/Migração)
+            elif not service._available:
+                app_available = False
+                downtime_reason = "Unknown Unavailable State" # Fallback
+                
+                # Tentar descobrir o estado exato olhando para as migrações
                 if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
                     last_migration = service._Service__migrations[-1]
-
+                    
+                    # Se a migração/provisionamento ainda não terminou
                     if last_migration["end"] is None:
-                        if last_migration.get("origin") is None:
-                            is_provisioning = True
+                        raw_status = last_migration.get("status")
+                        
+                        # ✅ MAPEAMENTO DE STATUS PARA RAZÕES LEGÍVEIS
+                        if raw_status == "waiting":
+                            downtime_reason = "Waiting in Server Queue (Download)"
+                        elif raw_status == "pulling_layers":
+                            downtime_reason = "Downloading Layers"
+                        elif raw_status == "migrating_service_state":
+                            downtime_reason = "Transferring State"
                         else:
-                            is_migrating = True
-                
-                
+                            downtime_reason = f"Operation Status: {raw_status}"
 
-                if is_provisioning:
-                    app_available = False
-                    status = "PROVISIONAMENTO"
-                elif is_migrating:
-                    app_available = False
-                    status = "MIGRAÇÃO"
-                else:
-                    # Verificar disponibilidade normal
-                    for service in app.services:
-                        if service.server:
-                            if service.server.status != "available" or not service._available:
-                                app_available = False
-                                break
-                        else:
-                            app_available = False
-                            break
-                    status = "INDISPONÍVEL" if not app_available else "DISPONÍVEL"
-                
-                
-                user.user_perceived_downtime_history[app_id].append(not app_available)
-                
-                if not app_available:
-                    print(f"[DEBUG_DOWNTIME] App {app.id}: DOWNTIME PERCEBIDO ({status}) - Step {current_step}")
-                else:
-                    print(f"[DEBUG_DOWNTIME] App {app.id} (server {service.server.id if service.server else 'None'}): {status} - Step {current_step}")
+            # REGISTRAR HISTÓRICO
+            # Se o app não está disponível E (usuário acessando OU falha de servidor), conta como downtime
+            # Falhas de servidor afetam a disponibilidade percebida mesmo fora da janela estrita de acesso em alguns modelos,
+            # mas para manter consistência com 'perceived', usamos is_making_access.
+            # PORÉM, se o serviço caiu (server_failed), o usuário PERCEBE a queda se tentar usar.
+            
+            is_downtime = not app_available and is_making_access
+            
+            user.user_perceived_downtime_history[app_id].append(is_downtime)
+            
+            if is_downtime and downtime_reason:
+                metrics.add_downtime_reason(downtime_reason)
+                print(f"[DEBUG_DOWNTIME] App {app.id}: DOWNTIME ({downtime_reason}) - Step {current_step}")
+            elif is_making_access:
+                print(f"[DEBUG_DOWNTIME] App {app.id} (server {service.server.id if service.server else 'None'}): Available - Step {current_step}")
 
 
 def get_user_perceived_downtime_count(application):
@@ -1116,6 +1158,97 @@ def get_user_perceived_downtime_count(application):
             total_perceived_downtime += user_downtime
     
     return total_perceived_downtime
+
+
+# ============================================================================
+# FAILURE RELIABILITY TRACKING (Reliability at failure instant)
+# ============================================================================
+
+_failure_reliability_events = []   # [{server_id, step, reliability_pct}]
+_failure_reliability_seen = set()  # {(server_id, failure_start_step)}
+
+def init_failure_reliability_tracking():
+    """Reseta buffers de rastreamento de confiabilidade em falhas."""
+    global _failure_reliability_events, _failure_reliability_seen
+    _failure_reliability_events = []
+    _failure_reliability_seen = set()
+
+def record_server_failure_reliability(current_step, horizon=10):
+    """
+    Registra a confiabilidade do servidor no exato step em que a falha inicia.
+    Usa failure_trace (planejado) para identificar o início da falha.
+    """
+    for server in EdgeServer.all():
+        # Flatten do trace de falhas
+        if not hasattr(server, "failure_model") or not server.failure_model.failure_trace:
+            continue
+
+        flatten_trace = [f for group in server.failure_model.failure_trace for f in group]
+        for failure in flatten_trace:
+            starts_at = failure["failure_starts_at"]
+            # Apenas falhas que começam neste step e que ainda não foram registradas
+            if starts_at != current_step or starts_at < 0:
+                continue
+
+            key = (server.id, starts_at)
+            if key in _failure_reliability_seen:
+                continue
+
+            reliability_pct = get_server_conditional_reliability(server, horizon)
+            _failure_reliability_events.append({
+                "server_id": server.id,
+                "step": starts_at,
+                "reliability_pct": reliability_pct
+            })
+            _failure_reliability_seen.add(key)
+
+def print_failure_reliability_summary():
+    """
+    Exibe, ao final da simulação, a confiabilidade dominante no momento das falhas.
+    """
+    if not _failure_reliability_events:
+        print("\n[FAILURE_RELIABILITY] Nenhuma falha registrada.")
+        return
+
+    # Histograma GLOBAL por faixa de 10%
+    global_bins = {f"{i*10}-{i*10+10}%": 0 for i in range(10)}
+    # Histograma POR SERVIDOR
+    per_server_bins = {}  # server_id -> {bucket_label: count}
+
+    for evt in _failure_reliability_events:
+        bucket = min(9, int(evt["reliability_pct"] // 10))
+        label = f"{bucket*10}-{bucket*10+10}%"
+        global_bins[label] += 1
+
+        sid = evt["server_id"]
+        if sid not in per_server_bins:
+            per_server_bins[sid] = {f"{i*10}-{i*10+10}%": 0 for i in range(10)}
+        per_server_bins[sid][label] += 1
+
+    global_dominant_bucket = max(global_bins.items(), key=lambda x: x[1])
+
+    print("\n" + "="*70)
+    print("[FAILURE_RELIABILITY] CONFIABILIDADE NO MOMENTO DAS FALHAS")
+    print("="*70)
+
+    # Faixa dominante por servidor
+    print("\n[FAILURE_RELIABILITY] Faixa dominante POR SERVIDOR:")
+    for sid in sorted(per_server_bins.keys()):
+        bins = per_server_bins[sid]
+        dominant = max(bins.items(), key=lambda x: x[1])
+        if dominant[1] == 0:
+            # nenhum evento registrado para este servidor (só por segurança)
+            continue
+        print(f"  - Servidor {sid}: faixa dominante {dominant[0]} (ocorrências: {dominant[1]})")
+
+    # Histograma global (para referência)
+    print("\n[FAILURE_RELIABILITY] Histograma global por faixa de 10%:")
+    for label, count in global_bins.items():
+        if count > 0:
+            print(f"  {label}: {count}")
+
+    print(f"\n[FAILURE_RELIABILITY] Faixa global dominante: {global_dominant_bucket[0]} (ocorrências: {global_dominant_bucket[1]})")
+    print("="*70)
 
 
 # ============================================================================
@@ -1232,38 +1365,51 @@ def get_server_trust_cost(server):
     proportion = time_since_repair / mtbf
     return failure_rate * proportion
 
-def get_application_delay_score(app: object) -> float:
-    """Calcula score de urgência por delay (MAIOR = mais urgente)."""
+def get_application_delay_cost(app: object) -> float:
+    """
+    Calcula score de prioridade baseado na ESCASSEZ de servidores viáveis.
+    
+    Lógica:
+    1. Conta quantos servidores disponíveis (status='available') atendem ao SLA de delay da aplicação.
+    2. O score é inversamente proporcional a essa contagem.
+       - Menos opções = Maior Score (Maior Prioridade).
+    
+    Exemplo:
+    - App A (SLA 20): 5 servidores atendem -> Score = 1/5 = 0.2
+    - App B (SLA 30): 1 servidor atende   -> Score = 1/1 = 1.0 (Prioridade 5x maior)
+    """
     user = app.users[0]
     delay_sla = user.delay_slas[str(app.id)]
-    current_delay = user.delays[str(app.id)] if user.delays[str(app.id)] is not None else 0
     
-    # 1. Urgência baseada na proximidade da violação
-    delay_urgency = max(0, current_delay / delay_sla) if delay_sla > 0 else 0
-    
-    # 2. Escassez de recursos (poucos servidores adequados = maior urgência)
+    # Identificar componentes de rede
     user_switch = user.base_station.network_switch
+    wireless_delay = user.base_station.wireless_delay
+    
+    # Filtrar apenas servidores funcionais
     available_servers = [s for s in EdgeServer.all() if s.status == "available"]
     
-    suitable_servers = 0
+    viable_servers_count = 0
+    
     for edge_server in available_servers:
-        server_delay = calculate_path_delay(
-            origin_network_switch=user_switch, 
-            target_network_switch=edge_server.network_switch
+        # Calcular delay total usando a topologia
+        total_delay = get_delay(
+            wireless_delay=wireless_delay,
+            origin_switch=user_switch,
+            target_switch=edge_server.network_switch
         )
-        if server_delay <= delay_sla:
-            suitable_servers += 1
+        
+        # Verificar se este servidor atende ao SLA
+        if total_delay <= delay_sla:
+            viable_servers_count += 1
     
-    # Escassez: poucos servidores = maior score
-    if suitable_servers == 0:
-        scarcity_factor = 10.0  # Score alto mas finito para indicar escassez total
+    # Calcular Score de Escassez
+    if viable_servers_count == 0:
+        # Caso Crítico: Nenhuma opção viável.
+        # Retorna um valor alto para tentar alocar no "menos pior" com prioridade máxima.
+        return 100.0 
     else:
-        scarcity_factor = 1.0 / suitable_servers
-    
-    # Combinar urgência e escassez
-    delay_score = (delay_urgency * 2.0) + scarcity_factor
-    
-    return delay_score
+        # Inversamente proporcional ao número de opções
+        return 1.0 / viable_servers_count
 
 def get_application_access_intensity_score(app: object) -> float:
     """Calcula score de intensidade de acesso (MAIOR = mais intenso)."""

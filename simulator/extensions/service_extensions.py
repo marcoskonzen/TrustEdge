@@ -39,21 +39,39 @@ def service_step(self):
         print(f"[SERVICE_STEP] target: {target_id_debug} (available: {target_available})")
         print(f"[SERVICE_STEP] Status da migração: {migration.get('status', 'N/A')}")
         
-        # ✅ DETECÇÃO DE MIGRAÇÃO DE RECUPERAÇÃO
+# ✅ DETECÇÃO DE MIGRAÇÃO DE RECUPERAÇÃO
         is_recovery_migration = (migration_reason == "server_failed")
         
         print(f"[SERVICE_STEP] is_recovery_migration: {is_recovery_migration}")
         print()
         
-        # ✅ DEBUG: Validar consistência
+        # ✅ DEBUG: Validar consistência (COM SUPORTE A LIVE MIGRATION)
         if relationships_created_by_algorithm:
             server_id = self.server.id if self.server else None
-            if self.server != target:
-                print(f"[SERVICE_STEP] ⚠️ INCONSISTÊNCIA: service.server={server_id}, esperado target={target_id_debug}")
+            
+            # Lógica de Live Migration:
+            # Se estamos baixando camadas (waiting/pulling) E a origem está viva,
+            # o serviço deve permanecer na origem.
+            # Caso contrário (download acabou, origem falhou, ou provisionamento), vai para o target.
+            is_downloading = migration.get("status") in ["waiting", "pulling_layers"]
+            should_be_on_origin = is_downloading and origin is not None and origin.available
+            
+            expected_server = origin if should_be_on_origin else target
+            expected_id_debug = expected_server.id if expected_server else "None"
+
+            if self.server != expected_server:
+                print(f"[SERVICE_STEP] ⚠️ INCONSISTÊNCIA: service.server={server_id}, esperado={expected_id_debug}")
+                print(f"              Status: {migration.get('status')} | Live Migration: {should_be_on_origin}")
                 print(f"              Corrigindo automaticamente...")
-                self.server = target
-                if target and self not in target.services:
-                    target.services.append(self)
+                
+                self.server = expected_server
+                if expected_server and self not in expected_server.services:
+                    expected_server.services.append(self)
+                
+                # Limpeza extra para evitar duplicidade (remove do servidor onde NÃO deveria estar)
+                other_server = target if should_be_on_origin else origin
+                if other_server and self in other_server.services:
+                    other_server.services.remove(self)
         
         # ═══════════════════════════════════════════════════════════════
         # ✅ REMOVER DETECÇÃO DE FALHA AQUI - edge_server_step() já cuida

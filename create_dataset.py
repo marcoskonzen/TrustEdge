@@ -151,7 +151,7 @@ partially_connected_hexagonal_mesh(
         {
             "number_of_objects": 1776,
             "delay": 3,
-            "bandwidth": 20,
+            "bandwidth": 12.5,
             "transmission_delay": 0.06,  # Value in seconds
         },
     ],

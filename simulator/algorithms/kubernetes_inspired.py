@@ -13,6 +13,9 @@ from simulator.helper_functions import *
 # Importing EdgeSimPy extensions
 from simulator.extensions import *
 
+# Importing from trust_edge_v3 for shared functions
+from .trust_edge_v3 import check_and_deprovision_inactive_services
+
 """
 KUBERNETES STANDARD ALGORITHM FOR EDGE COMPUTING
 Implements authentic Kubernetes behavior:
@@ -117,25 +120,25 @@ def classify_qos(service):
     if not service:
         return "BestEffort"
     
-    # Simular resource requests/limits baseado em demanda
-    # No mundo real: obtido de pod.spec.containers[].resources
-    
-    # Calcular razão de uso de recursos
-    cpu_demand = service.cpu_demand if hasattr(service, 'cpu_demand') else 0
-    memory_demand = service.memory_demand if hasattr(service, 'memory_demand') else 0
+    # Simular requests/limits baseado em demanda (usando helper functions)
+    cpu_demand = get_normalized_demand(service)  # From helper_functions.py
+    memory_demand = get_normalized_demand(service)  # Assumindo função similar para memória
     
     # Simular requests (70% da demanda) e limits (100% da demanda)
-    # Isto aproxima o comportamento real de requests < limits
+    cpu_requests = cpu_demand * 0.7
+    cpu_limits = cpu_demand
+    memory_requests = memory_demand * 0.7
+    memory_limits = memory_demand
     
-    if cpu_demand == 0 and memory_demand == 0:
-        return "BestEffort"  # Sem recursos definidos
-    
-    # Se demanda é consistente (não varia), considerar Guaranteed
-    # Em produção real: verificar se requests == limits
-    if hasattr(service, '_resource_stable') and service._resource_stable:
+    # Verificar Guaranteed: requests == limits
+    if cpu_requests == cpu_limits and memory_requests == memory_limits:
         return "Guaranteed"
     
-    # Caso padrão: Burstable (requests < limits)
+    # Verificar BestEffort: sem demanda
+    if cpu_demand == 0 and memory_demand == 0:
+        return "BestEffort"
+    
+    # Caso padrão: Burstable
     return "Burstable"
 
 def get_qos_priority(qos_class):
@@ -234,98 +237,50 @@ def score_nodes_standard(nodes, service, user, application):
     scored_nodes = []
     
     for server in nodes:
-        # Inicializar score
         total_score = 0.0
         
-        # ====================================================================
-        # 1. NodeResourcesLeastAllocated (peso: 1)
-        # ====================================================================
-        # Fórmula: (allocatable - requested) / allocatable * 100
-        # Maior score = mais recursos disponíveis
-        
+        # 1. NodeResourcesLeastAllocated (peso: 1, normalizado 0-10)
         cpu_allocatable = server.cpu
         cpu_requested = server.cpu_demand
-        cpu_score = ((cpu_allocatable - cpu_requested) / cpu_allocatable) * 100 if cpu_allocatable > 0 else 0
+        cpu_score = ((cpu_allocatable - cpu_requested) / cpu_allocatable) * 10 if cpu_allocatable > 0 else 0
         
         memory_allocatable = server.memory
         memory_requested = server.memory_demand
-        memory_score = ((memory_allocatable - memory_requested) / memory_allocatable) * 100 if memory_allocatable > 0 else 0
+        memory_score = ((memory_allocatable - memory_requested) / memory_allocatable) * 10 if memory_allocatable > 0 else 0
         
-        least_allocated_score = (cpu_score + memory_score) / 2
-        total_score += least_allocated_score * 1  # peso = 1
+        least_allocated_score = (cpu_score + memory_score) / 2  # 0-10
+        total_score += least_allocated_score
         
-        # ====================================================================
-        # 2. NodeResourcesBalancedAllocation (peso: 1)
-        # ====================================================================
-        # Fórmula: 10 - variance * 10
-        # Menor variância = melhor balanceamento
-        
+        # 2. NodeResourcesBalancedAllocation (peso: 1, normalizado 0-10)
         cpu_fraction = cpu_requested / cpu_allocatable if cpu_allocatable > 0 else 0
         memory_fraction = memory_requested / memory_allocatable if memory_allocatable > 0 else 0
         
         mean = (cpu_fraction + memory_fraction) / 2
         variance = ((cpu_fraction - mean) ** 2 + (memory_fraction - mean) ** 2) / 2
         
-        balanced_score = 10 - (variance * 10)
-        balanced_score = max(0, balanced_score)  # Garantir não-negativo
-        total_score += balanced_score * 1  # peso = 1
+        balanced_score = 10 - (variance * 10)  # 0-10
+        balanced_score = max(0, balanced_score)
+        total_score += balanced_score
         
-        # ====================================================================
-        # 3. ImageLocality (peso: 1) - USANDO LÓGICA DO EDGESIMPY
-        # ====================================================================
-        # Favorece nodes que já têm as imagens do container em cache
-        # Reduz tempo de pull de imagens
-        # 
-        # Utiliza a mesma lógica do EdgeSimPy para verificar layers em cache
-        
-        image_score = 0.0
-        
-        # Obter a imagem do serviço
-        service_image = ContainerImage.find_by(
-            attribute_name="digest", 
-            attribute_value=service.image_digest
-        )
-        
-        if service_image:
-            # Obter todas as layers da imagem
-            service_layers = [
-                ContainerLayer.find_by(attribute_name="digest", attribute_value=digest)
-                for digest in service_image.layers_digests
-            ]
-            
-            # Contar quantas layers já estão em cache no servidor
-            cached_layers_count = 0
-            total_layers = len(service_layers)
-            
-            for service_layer in service_layers:
-                # Verificar se layer está em cache usando mesma lógica do EdgeSimPy
-                is_cached = any(
-                    cached_layer.digest == service_layer.digest
-                    for cached_layer in server.container_layers
-                )
-                
-                if is_cached:
-                    cached_layers_count += 1
-            
-            # Calcular score baseado na proporção de layers em cache
+        # 3. ImageLocality (peso: 1, normalizado 0-10)
+        # Usar função nativa do EdgeSimPy para calcular camadas não-cached
+        if hasattr(service, 'image_digest'):
+            service_image = ContainerImage.find_by(attribute_name="digest", attribute_value=service.image_digest)
+            total_layers = len(service_image.layers_digests) if service_image and hasattr(service_image, 'layers_digests') else 0
+            uncached_layers = server._get_uncached_layers(service=service)
+            cached_layers = total_layers - len(uncached_layers)
             if total_layers > 0:
-                cache_ratio = cached_layers_count / total_layers
-                image_score = cache_ratio * 10  # Escala 0-10
+                image_score = (cached_layers / total_layers) * 10
             else:
-                image_score = 0.0
-            
-            # DEBUG: Mostrar informações sobre cache
-            print(f"[K8S_SCORE] Server {server.id}: {cached_layers_count}/{total_layers} layers em cache (score: {image_score:.2f})")
+                image_score = 0
+        else:
+            image_score = 0
         
-        total_score += image_score * 1  # peso = 1
+        image_score = min(image_score, 10)  # Garantir 0-10
+        total_score += image_score
         
-        # ====================================================================
-        # SCORE FINAL (normalizado para 0-100)
-        # ====================================================================
-        # Soma de 3 plugins com peso 1 cada = max 120 pontos
-        # Normalizar para escala 0-100
-        
-        normalized_score = (total_score / 120) * 100
+        # Score final: soma direta (0-30), normalizada para 0-100
+        normalized_score = (total_score / 30) * 100
         
         scored_nodes.append({
             "server": server,
@@ -365,6 +320,11 @@ def kubernetes_inspired(parameters: dict = {}):
         reset_migration_counters()
         print("[K8S] Kubernetes Standard Scheduler inicializado")
         print("[K8S] AVISO: Sem migração proativa ou rebalanceamento automático")
+
+        # Log dataset overview for validation
+        from simulator.helper_functions import show_scenario_overview
+        show_scenario_overview()  # From helper_functions.py
+        print("[K8S] Dataset validado: focando em resource-based scheduling.")
     
     # 1. DESPROVISIONAMENTO DE SERVIÇOS INATIVOS
     check_and_deprovision_inactive_services(current_step)
@@ -448,6 +408,11 @@ def reactive_pod_recreation(current_step):
         user = item["user"]
         qos_class = item["qos_class"]
         
+        # Simular eviction delay (e.g., 5min = 300 steps, mas ajustar para simulação)
+        eviction_delay = 5  # steps
+        if current_step - item.get("failure_detected_at", 0) < eviction_delay:
+            continue  # Ainda não evitou
+
         print(f"\n[K8S] Recriando pod {service.id} (QoS: {qos_class})")
         print(f"      Node anterior: {'FAILED' if not service.server else service.server.id}")
         

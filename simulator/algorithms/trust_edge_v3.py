@@ -3,8 +3,6 @@ from edge_sim_py import *
 
 # Importing native Python modules/packages
 from json import dumps
-import math
-import operator
 from datetime import datetime
 
 # Importing helper functions
@@ -40,6 +38,8 @@ _provisioning_and_migration_metrics = {
     # Detalhes para auditoria
     "by_step": {},
 }
+
+_failed_target_attempts = {}
 
 def initialize_provisioning_and_migration_tracking():
     """Inicializa o sistema unificado de rastreamento."""
@@ -78,6 +78,8 @@ def collect_final_provisioning_and_migration_metrics():
     _provisioning_and_migration_metrics["total_migrations"] = 0
     _provisioning_and_migration_metrics["migrations_finished"] = 0
     _provisioning_and_migration_metrics["migrations_interrupted"] = 0
+    
+    # Inicializar vazio ou com os padrões
     _provisioning_and_migration_metrics["migrations_by_reason"] = {
         "server_failed": 0,
         "delay_violation": 0,
@@ -92,13 +94,28 @@ def collect_final_provisioning_and_migration_metrics():
         for migration in service._Service__migrations:
             origin = migration.get("origin")
             status = migration.get("status", "unknown")
-            reason = migration.get("migration_reason", "unknown")
             
+            # ✅ CORREÇÃO: Tentar recuperar a razão ou inferir se estiver faltando
+            reason = migration.get("migration_reason")
+            
+            if not reason:
+                if origin is None and service in _waiting_queue:
+                    reason = "server_failed"
+                # elif origin and not origin.available:
+                #     # Se não tem razão mas a origem está morta, assumimos falha
+                #     reason = "server_failed"
+                else:
+                    reason = "unknown_logic_error"
+
             # ═══════════════════════════════════════════════════════════
             # CLASSIFICAR: Provisionamento vs Migração
             # ═══════════════════════════════════════════════════════════
-            is_provisioning = (origin is None)
+            is_provisioning = (origin is None) and service not in _waiting_queue
             
+            if reason == "initial_provisioning":
+                is_provisioning = (origin is None)
+                reason = "Initial Provisioning"
+                
             if is_provisioning:
                 # PROVISIONAMENTO
                 _provisioning_and_migration_metrics["total_provisionings"] += 1
@@ -109,7 +126,7 @@ def collect_final_provisioning_and_migration_metrics():
                     _provisioning_and_migration_metrics["provisionings_interrupted"] += 1
                 
             else:
-                # MIGRAÇÃO
+                # MIGRAÇÃO (Inclui recuperação de falhas onde origin=None mas reason=server_failed)
                 _provisioning_and_migration_metrics["total_migrations"] += 1
                 
                 if status == "finished":
@@ -117,9 +134,11 @@ def collect_final_provisioning_and_migration_metrics():
                 elif status == "interrupted":
                     _provisioning_and_migration_metrics["migrations_interrupted"] += 1
                 
-                # Contabilizar por motivo
-                if reason in _provisioning_and_migration_metrics["migrations_by_reason"]:
-                    _provisioning_and_migration_metrics["migrations_by_reason"][reason] += 1
+                # Contabilizar dinamicamente qualquer motivo
+                if reason not in _provisioning_and_migration_metrics["migrations_by_reason"]:
+                    _provisioning_and_migration_metrics["migrations_by_reason"][reason] = 0
+                
+                _provisioning_and_migration_metrics["migrations_by_reason"][reason] += 1
     
     print(f"✓ Métricas coletadas com sucesso\n")
 
@@ -293,7 +312,7 @@ def get_waiting_queue():
     """Retorna a fila de espera global."""
     return _waiting_queue
 
-def add_to_waiting_queue(user, application, service, priority_score=0):
+def add_to_waiting_queue(user, application, service, priority_score=0, reason="server_failed"):
     """Adiciona uma aplicação à fila de espera."""
     # Verificar se a aplicação já está na fila
     for item in _waiting_queue:
@@ -303,22 +322,25 @@ def add_to_waiting_queue(user, application, service, priority_score=0):
 
     user.delays[str(application.id)] = float('inf')  # Definir delay como infinito enquanto estiver na fila
 
+    service._waiting_reason = reason
+
     waiting_item = {
         "user": user,
         "application": application,
         "service": service,
         "priority_score": priority_score,
+        "reason": reason,
         "queued_at_step": user.model.schedule.steps,
         "delay": user.delays[str(application.id)],
         "delay_sla": user.delay_slas[str(application.id)],
-        "delay_score": get_application_delay_score(application),
+        "delay_cost": get_application_delay_cost(application),
         "intensity_score": get_application_access_intensity_score(application),
         "demand_resource": get_normalized_demand(application.services[0]),
         "delay_urgency": get_delay_urgency(application, user)
     }
 
     _waiting_queue.append(waiting_item)
-    print(f"[LOG] Aplicação {application.id} adicionada à fila de espera (Prioridade: {priority_score:.4f})")
+    print(f"[LOG] Aplicação {application.id} adicionada à fila de espera (Prioridade: {priority_score:.4f}), Razão: {reason}")
 
 def remove_from_waiting_queue(application_id):
     """Remove uma aplicação da fila de espera."""
@@ -482,6 +504,11 @@ def collect_server_resource_snapshot(current_step):
         cpu_available = server.cpu - server.cpu_demand
         mem_available = server.memory - server.memory_demand
 
+        if server.status == "available":
+            reliability = get_server_conditional_reliability(server, 100)
+        else:
+            reliability = 0.0
+
         entry = {
             "step": current_step,
             "server_id": server.id,
@@ -493,6 +520,7 @@ def collect_server_resource_snapshot(current_step):
             "memory_total": server.memory,
             "memory_demand": server.memory_demand,
             "memory_available": mem_available,
+            "reliability": reliability,
         }
         snapshot.append(entry)
 
@@ -500,7 +528,8 @@ def collect_server_resource_snapshot(current_step):
             f"[SERVER_SNAPSHOT] Server {server.id} | "
             f"Status={server.status} | Available={server.available} | "
             f"CPU {server.cpu_demand}/{server.cpu} (free={cpu_available}) | "
-            f"MEM {server.memory_demand}/{server.memory} (free={mem_available})"
+            f"MEM {server.memory_demand}/{server.memory} (free={mem_available}) | "
+            f"Reliability={reliability:.2f}%"
         )
 
         # Totais globais
@@ -588,6 +617,14 @@ def trust_edge_v3(parameters: dict = {}):
     model = Topology.first().model
     current_step = model.schedule.steps + 1
     model._trust_edge_current_step = current_step
+
+    # Inicializar tracking no primeiro step
+    if current_step == 1:
+        initialize_provisioning_and_migration_tracking()
+        init_failure_reliability_tracking()
+
+    # Registrar confiabilidade quando uma falha começa neste step
+    record_server_failure_reliability(current_step)
     
     print()
     print()
@@ -598,10 +635,6 @@ def trust_edge_v3(parameters: dict = {}):
 
     # 2. Coleta e resumo dos recursos e demandas dos servidores
     collect_server_resource_snapshot(current_step)
-
-    # 3. Inicializar contadores de provisionamentos e migrações
-    if current_step == 0:
-        initialize_provisioning_and_migration_tracking()
 
     # 4. Verificar e desprovisionar serviços inativos e inconsistentes
     check_and_deprovision_inactive_services(current_step)
@@ -634,6 +667,9 @@ def trust_edge_v3(parameters: dict = {}):
         
         # Imprimir resumo consolidado
         print_final_provisioning_and_migration_summary()
+
+        # Relatório de confiabilidade no momento das falhas
+        print_failure_reliability_summary()
         
         # Auditoria de tempos (opcional - para debug)
         # audit_migration_times()
@@ -663,7 +699,7 @@ def process_waiting_queue(current_step):
     for waiting_item in _waiting_queue:
         waiting_queue_metadata.append({
             "priority_score": waiting_item["priority_score"],
-            "delay_score": waiting_item["delay_score"],
+            "delay_cost": waiting_item["delay_cost"],
             "intensity_score": waiting_item["intensity_score"],
             "demand_resource": waiting_item["demand_resource"],
             "delay_urgency": waiting_item["delay_urgency"],
@@ -699,8 +735,10 @@ def process_waiting_queue(current_step):
         print(f"      Tempo restante: {remaining_time} steps")
         
         # Tentar provisionar
-        if try_provision_service(user, app, service):
+        if try_provision_service(user, app, service, reason=waiting_item.get("reason")):
             provisioned_items.append(waiting_item)
+            if hasattr(service, "_waiting_reason"):
+                del service._waiting_reason
         else:
             print(f"[DEBUG_WAITING_QUEUE] Aplicação {app.id} ainda não pode ser provisionada")
     
@@ -728,7 +766,7 @@ def monitor_and_migrate_services(parameters: dict = {}):
     """Monitora servidores e migra serviços quando necessário."""
     current_step = parameters.get("current_step")
     
-    reliability_threshold = 0
+    reliability_threshold = 95
     delay_threshold = 1
     
     print()
@@ -753,7 +791,7 @@ def check_ongoing_migrations(current_step):
     Verifica e processa TODAS as migrações:
     1. Migrações finalizadas (finished)
     2. Migrações interrompidas (interrupted) - incluindo as marcadas por edge_server_step()
-    3. Migrações ativas (em andamento)
+    3. Migrações ativas (em andamento) - Gerencia Live Migration
     """
     print(f"\n[DEBUG_MONITORING] === VERIFICANDO MIGRAÇÕES - STEP {current_step} ===")
     
@@ -767,6 +805,8 @@ def check_ongoing_migrations(current_step):
             continue
             
         migration = service._Service__migrations[-1]
+        origin = migration.get("origin")
+        target = migration.get("target")
         
         # ═══════════════════════════════════════════════════════════════
         # CASO 1: MIGRAÇÕES MARCADAS PARA CANCELAMENTO (edge_server_step)
@@ -807,21 +847,19 @@ def check_ongoing_migrations(current_step):
         # ═══════════════════════════════════════════════════════════════
         if migration["end"] == current_step:
             status = migration.get("status")
-            origin = migration.get("origin")
-            target = migration.get("target")
             
             if status == "finished":
                 migrations_finished += 1
                 print(f"[DEBUG_MONITORING] ✅ Migração FINALIZADA - Serviço {service.id}")
                 
-                # Validar consistência (service_step já atualizou)
+                # Validar consistência (Garantir que está no target)
                 if service.server != target:
                     print(f"[DEBUG_MONITORING] ⚠️ Corrigindo: service.server={service.server.id if service.server else None}, esperado={target.id}")
                     service.server = target
                     if service not in target.services:
                         target.services.append(service)
                 
-                # Limpar origem
+                # Limpar origem definitivamente
                 if origin and service in origin.services:
                     origin.services.remove(service)
                     
@@ -844,10 +882,43 @@ def check_ongoing_migrations(current_step):
                     })
         
         # ═══════════════════════════════════════════════════════════════
-        # CASO 3: MIGRAÇÕES AINDA ATIVAS
+        # CASO 3: MIGRAÇÕES AINDA ATIVAS (Gerenciamento de Live Migration)
         # ═══════════════════════════════════════════════════════════════
         elif migration["end"] is None:
             migrations_active += 1
+            status = migration.get("status")
+            
+            # A. Verificar falha da Origem durante Live Migration
+            # Se estamos rodando na origem, mas ela falhou, precisamos mover para o target (mesmo que indisponível)
+            if service.server == origin:
+                if origin and not origin.available:
+                    print(f"[DEBUG_MONITORING] 💥 Origem {origin.id} falhou durante Live Migration! Movendo para Target (Indisponível)")
+                    
+                    # Mover ponteiro para o destino
+                    service.server = target
+                    if service not in target.services:
+                        target.services.append(service)
+                    
+                    # Marcar como indisponível (Downtime começa agora)
+                    service._available = False
+            
+            # B. Verificar Cutover (Downloads concluídos)
+            # Se o status mudou para 'migrating_service_state', significa que downloads acabaram
+            # e o simulador está transferindo o estado (RAM/Disco). Hora de trocar de servidor.
+            if status == "migrating_service_state" and service.server == origin:
+                print(f"[DEBUG_MONITORING] ✂️ Cutover: Downloads concluídos. Movendo serviço {service.id} de {origin.id} para {target.id}")
+                
+                # Remover da origem
+                if origin and service in origin.services:
+                    origin.services.remove(service)
+                
+                # Mover para destino
+                service.server = target
+                if service not in target.services:
+                    target.services.append(service)
+                
+                # Pequeno downtime simulado durante a transferência de estado
+                service._available = False
 
     # ═══════════════════════════════════════════════════════════════
     # REPROCESSAR SERVIÇOS AFETADOS
@@ -888,10 +959,11 @@ def identify_services_for_migration(current_step, reliability_threshold, delay_t
     """Identifica serviços que precisam ser migrados."""
     services_to_migrate = []
     processed_services = set()
-
-    has_active_migration = False
-    is_initial_provisioning = False
     
+    # Configuração de Histerese Temporal (Cooldown)
+    # Impede que um serviço migre novamente menos de 5 steps após chegar
+    MIGRATION_COOLDOWN = 5
+
     for user in User.all():
         # ✅ PULAR usuários fazendo nova requisição (provisionamento em andamento)
         if is_making_request(user, current_step):
@@ -903,18 +975,29 @@ def identify_services_for_migration(current_step, reliability_threshold, delay_t
             app = app_info["application"]
             service = app.services[0]
             server = service.server
-
+            
             if service.id in processed_services:
                 continue
             processed_services.add(service.id)
             
             # ═════════════════════════════════════════════════════════════
-            # PROTEÇÕES CORRIGIDAS
+            # PROTEÇÕES E FILTROS
             # ═════════════════════════════════════════════════════════════
-            
+
+            # ✅ PROTEÇÃO 0: COOLDOWN (Evitar Ping-Pong)
+            # Só aplica se o servidor atual estiver VIVO. Se falhou, ignora cooldown.
+            if server and server.available:
+                if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
+                    last_mig = service._Service__migrations[-1]
+                    # Se a última migração terminou há pouco tempo
+                    if last_mig.get("end") is not None:
+                        steps_since_migration = current_step - last_mig["end"]
+                        if steps_since_migration < MIGRATION_COOLDOWN:
+                            # print(f"[DEBUG] App {app.id} em COOLDOWN ({steps_since_migration}/{MIGRATION_COOLDOWN} steps) - pulando")
+                            continue
+
             # ✅ PROTEÇÃO 1: Detectar provisionamento inicial ou migração ativa
-            
-            
+            has_active_migration = False
             if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
                 last_migration = service._Service__migrations[-1]
                 
@@ -923,7 +1006,6 @@ def identify_services_for_migration(current_step, reliability_threshold, delay_t
                     
                     # Diferenciar: provisionamento inicial vs migração
                     if last_migration.get("origin") is None:
-                        is_initial_provisioning = True
                         print(f"[DEBUG] App {app.id} em PROVISIONAMENTO INICIAL - pulando")
                     else:
                         print(f"[DEBUG] App {app.id} em MIGRAÇÃO ATIVA - pulando")
@@ -974,7 +1056,6 @@ def identify_services_for_migration(current_step, reliability_threshold, delay_t
                     print(f"[DEBUG] App {app.id}: INCONSISTÊNCIA detectada!")
                     print(f"        Servidor: {server.id} (available={server.available})")
                     print(f"        Delay: {current_delay}")
-                    print(f"        Service._available: {service._available}")
                     continue
             
             # ✅ AVALIAÇÃO NORMAL: delay e confiabilidade
@@ -1001,10 +1082,11 @@ def evaluate_migration_criteria(service, server, user, app, remaining_time,
                                reliability_threshold, delay_threshold, current_step):
     """Avalia todos os critérios para migração de um serviço."""
     
-    # ✅ VERIFICAR SE SERVIÇO ESTÁ EM PROVISIONAMENTO INICIAL
+    # # ✅ VERIFICAR SE SERVIÇO ESTÁ EM PROVISIONAMENTO INICIAL
     # if is_making_request(user, current_step):
     #     print(f"[DEBUG] Serviço {service.id} em provisionamento inicial - não avaliar migração")
     #     return {"needs_migration": False}
+    
     # if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
     #     last_migration = service._Service__migrations[-1]
         
@@ -1013,7 +1095,7 @@ def evaluate_migration_criteria(service, server, user, app, remaining_time,
     #         print(f"[DEBUG] Serviço {service.id} em provisionamento inicial - não avaliar migração")
     #         return {"needs_migration": False}
     
-    # # ✅ 1. Servidor em falha
+    # # 1. Servidor em falha
     # if server and not server.available:
     #     print(f"[DEBUG] Serviço {service.id} no servidor {server.id} que falhou")
     #     return {
@@ -1083,7 +1165,7 @@ def process_migration_queue(services_to_migrate, current_step):
             print(f"[DEBUG_MONITORING] Servidor atual: {current_server.id} (Status: {current_server.status})")
 
         # Encontrar servidor de destino
-        target_server = find_migration_target(user, service, current_server, reason)
+        target_server = find_migration_target(user, service, current_server, reason, current_step)
         
         if target_server and target_server.available:
             if initiate_service_migration(service, target_server, reason, current_step):
@@ -1095,73 +1177,143 @@ def process_migration_queue(services_to_migrate, current_step):
                
                # Adicionar à fila de espera com alta prioridade (falha de servidor)
                 priority_score = 999.0  # Prioridade máxima para falhas de servidor
-                add_to_waiting_queue(user, app, service, priority_score)
+                add_to_waiting_queue(user, app, service, priority_score, reason="server_failed")
      
             else:
                 print(f"[DEBUG_MONITORING] Sem servidor disponível - mantendo no servidor atual {current_server.id}")
 
-def find_migration_target(user, service, current_server, migration_reason):
-    """Encontra o melhor servidor de destino para migração."""
-    available_servers = get_host_candidates(user,service)
+def find_migration_target(user, service, current_server, migration_reason, current_step):
+    """Encontra o melhor servidor de destino para migração com HISTERESE."""
+    
+    # 1. Identificar servidor atual com segurança
+    current_server_id = current_server.id if current_server else None
+    
+    # 2. Obter candidatos
+    available_servers = get_host_candidates(user, service)
     
     if not available_servers:
         return None
     
-    origin_server_id = None
-
-    if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
-        last_migration = service._Service__migrations[-1]
-        origin = last_migration.get("origin")
-        if origin:
-            origin_server_id = origin.id
-    
-    # Filtrar candidatos (excluir origem real)
+    # 3. FILTRO RÍGIDO: Remover o servidor atual da lista de candidatos
+    # Isso impede o erro de "Origin: 18 -> Target: 18"
     migration_candidates = [
         candidate for candidate in available_servers
-        if not origin_server_id or candidate["object"].id != origin_server_id
+        if current_server_id is None or candidate["object"].id != current_server_id
+    ]
+
+    # ❌ Bloquear retentativas consecutivas para destinos que falharam no step anterior
+    failed_for_service = _failed_target_attempts.get(service.id, {})
+    migration_candidates = [
+        c for c in migration_candidates
+        if failed_for_service.get(c["object"].id) is None
+        or (current_step - failed_for_service[c["object"].id]) > 1
     ]
     
     if not migration_candidates:
-        print(f"[LOG] ⚠️  Nenhuma alternativa melhor que servidor atual {current_server.id}")
+        print(f"[LOG] ⚠️  Sem candidatos alternativos (apenas o atual disponível)")
         return None
     
-    # Priorizar servidores que não violam SLA
-    migration_candidates = sort_host_candidates(migration_candidates)
+    # Obter SLA para ponderação
+    app_id = str(service.application.id)
+    delay_sla = user.delay_slas[app_id]
     
-    # Filtrar apenas candidatos que melhoram a situação
-    best_candidates = []
-    current_delay = user.delays[str(service.application.id)]
-    current_sla = user.delay_slas[str(service.application.id)]
+    # 4. Ordenar candidatos pela nova lógica ponderada
+    migration_candidates = sort_host_candidates(migration_candidates, delay_sla=delay_sla)
     
-    for candidate in migration_candidates:
-        candidate_delay = candidate["overall_delay"]
-        
-        # Para violação de delay: só migrar se melhora significativamente
-        if migration_reason == "delay_violation":
-            if candidate_delay < current_delay * 0.9:  # 10% de melhoria mínima
-                best_candidates.append(candidate)
+    best_candidate = migration_candidates[0]
+    best_server = best_candidate["object"]
+    
+    # ==============================================================================
+    # LÓGICA DE HISTERESE (Estabilidade)
+    # Só migrar se valer MUITO a pena, para evitar Ping-Pong
+    # ==============================================================================
+    
+    # ✅ CURTO-CIRCUITO PARA MIGRAÇÃO POR CONFIABILIDADE
+    if migration_reason == "low_reliability":
+        reliability_threshold = 80  # mesmo valor usado no monitoramento
+        target_rel = best_candidate.get("conditional_reliability", 0)
+        current_rel = 0
+        current_server_metadata = next((s for s in available_servers if s["object"].id == current_server_id), None)
+        if current_server_metadata:
+            current_rel = current_server_metadata.get("conditional_reliability", 0)
+        within_sla = best_candidate["overall_delay"] <= delay_sla
+        improves_reliability = target_rel > current_rel
+
+        # Nova regra: se melhora confiabilidade e está dentro do SLA, aceita mesmo abaixo do threshold
+        if within_sla and improves_reliability:
+            if best_server.has_capacity_to_host(service):
+                print(f"[LOG] ✅ Migração de CONFIABILIDADE aceita: Destino {best_server.id} (Delay dentro do SLA, Rel {target_rel:.2f}% -> {current_rel:.2f}%)")
+                # Sucesso: limpar bloqueio para este destino
+                _failed_target_attempts.get(service.id, {}).pop(best_server.id, None)
+                return best_server
+            else:
+                print(f"[LOG] 🛑 Cancelada: destino {best_server.id} sem capacidade (Rel {target_rel:.2f}%, Delay {best_candidate['overall_delay']})")
+                _failed_target_attempts.setdefault(service.id, {})[best_server.id] = current_step
+                return None
         else:
-            # Para outros motivos: qualquer servidor sem violação SLA
-            if candidate["sla_violations"] == 0:
-                best_candidates.append(candidate)
-    
-    if not best_candidates:
-        print(f"[LOG] ⚠️  Nenhum candidato melhora a situação atual")
-        return None
-    
-    # Retornar melhor candidato disponível
-    for candidate in best_candidates:
-        edge_server = candidate["object"]
-        if edge_server.has_capacity_to_host(service):
-            return edge_server
-        else:
+            print(f"[LOG] 🛑 Cancelada (low_reliability): within_sla={within_sla}, improves_reliability={improves_reliability}, target_rel={target_rel:.2f}%, current_rel={current_rel:.2f}%")
+            _failed_target_attempts.setdefault(service.id, {})[best_server.id] = current_step
             return None
+            
+    # Se o motivo for falha do servidor, migra imediatamente (sem histerese)
+    if migration_reason == "server_failed" or current_server is None or not current_server.available:
+        print(f"[LOG] ✅ Migração de RECUPERAÇÃO aceita para {best_server.id}")
+        return best_server
+
+    # Se o motivo for performance (delay), aplicar histerese
+    # Precisamos calcular o score do servidor ATUAL para comparar
+    current_server_metadata = next((s for s in available_servers if s["object"].id == current_server_id), None)
+    
+    if current_server_metadata:
+        # Recalcular scores (mesma lógica do sort_host_candidates)
+        # Score menor é melhor
+        
+        # Função auxiliar rápida para calcular score
+        def calculate_score(meta):
+            # Normalização simplificada para comparação relativa
+            sla_cost = (meta["overall_delay"] / delay_sla) if delay_sla > 0 else meta["sla_violations"] * 10
+            # Penalidade de download (se uncached > 0)
+            download_cost = 2.0 if meta["amount_of_uncached_layers"] > 0 else 0.0
+            return sla_cost + download_cost
+
+        current_score = calculate_score(current_server_metadata)
+        new_score = calculate_score(best_candidate)
+        
+        # HISTERESE: O novo score deve ser pelo menos 20% melhor (menor) que o atual
+        improvement_threshold = 0.80 
+        
+        print(f"[LOG] ⚖️  Comparação de Histerese:")
+        print(f"      Atual ({current_server.id}): Score ~{current_score:.4f} (Delay {current_server_metadata['overall_delay']})")
+        print(f"      Novo  ({best_server.id}): Score ~{new_score:.4f} (Delay {best_candidate['overall_delay']})")
+        
+        if current_server_metadata['overall_delay'] > delay_sla and best_candidate['overall_delay'] <= delay_sla:
+            print(f"[LOG] ✅ Migração aceita: Novo servidor resolve violação de SLA")
+        else:
+            print(f"[LOG] 🛑 Migração cancelada (não resolve violação de SLA)")
+            _failed_target_attempts.setdefault(service.id, {})[best_server.id] = current_step
+            return None
+            
+    # Se passou pela histerese ou não conseguimos calcular o atual
+    if best_server.has_capacity_to_host(service):
+        print(f"[LOG] ✅ Servidor {best_server.id} selecionado (Melhor Score + Histerese)")
+        # Sucesso: limpar bloqueio para este destino
+        _failed_target_attempts.get(service.id, {}).pop(best_server.id, None)
+        return best_server
+
+    print(f"[LOG] ⚠️  Melhor candidato sem capacidade")
+    _failed_target_attempts.setdefault(service.id, {})[best_server.id] = current_step
+    return None
+    
 
 
 def initiate_service_migration(service, target_server, reason, current_step):
     """Inicia migração com relacionamentos antecipados."""
     
     # ✅ DEBUG IMEDIATO
+    if not reason:
+        reason = "server_failed" if (service.server and not service.server.available) else "unknown_forced"
+        print(f"[INITIATE_MIGRATION] ⚠️ Razão vazia detectada! Forçando para: {reason}")
+
     print(f"\n[INITIATE_MIGRATION] === INÍCIO ===")
     print(f"[INITIATE_MIGRATION] Serviço: {service.id}")
     print(f"[INITIATE_MIGRATION] Target: {target_server.id}")
@@ -1207,17 +1359,35 @@ def initiate_service_migration(service, target_server, reason, current_step):
         migration["relationships_created_by_algorithm"] = True
         migration["origin_cleanup_pending"] = True
         
-        print(f"[INITIATE_MIGRATION] Flags adicionadas:")
-        print(f"                     migration_reason (depois): '{migration['migration_reason']}'")
-        print(f"                     relationships_created_by_algorithm: {migration['relationships_created_by_algorithm']}")
+        # ==============================================================================
+        # NOVA LÓGICA DE LIVE MIGRATION
+        # ==============================================================================
         
-        # ✅ 5. DEPOIS criar relacionamentos SOMENTE NO DESTINO
-        service.server = target_server
-        if service not in target_server.services:
-            target_server.services.append(service)
-        
-        # ✅ 6. Marcar como INDISPONÍVEL
-        service._available = False
+        # Se for migração de recuperação (origem falhou ou não existe), move imediatamente
+        if original_server is None or not original_server.available:
+            print(f"[INITIATE_MIGRATION] 🔄 Cold Migration: Origem indisponível - movendo para Target imediatamente")
+            service.server = target_server
+            if service not in target_server.services:
+                target_server.services.append(service)
+            service._available = False
+            
+        else:
+            # Se a origem está viva, mantém o serviço lá (Live Migration)
+            print(f"[INITIATE_MIGRATION] ⚡ Live Migration: Mantendo serviço na Origem {original_server.id} durante download")
+            
+            # Forçar ponteiro para origem (pois o provision() pode ter mudado)
+            service.server = original_server
+            
+            # Garantir que está na lista da origem
+            if service not in original_server.services:
+                original_server.services.append(service)
+            
+            # Remover da lista do target por enquanto (será adicionado no cutover)
+            if service in target_server.services:
+                target_server.services.remove(service)
+                
+            # Manter disponível
+            service._available = True
         
         print(f"[INITIATE_MIGRATION] ✓ Migração registrada com sucesso")
         print(f"[INITIATE_MIGRATION] === FIM ===\n")
@@ -1256,30 +1426,20 @@ def update_application_delays(current_step):
                 user.delays[str(app.id)] = 0
                 continue
             
-            # ✅ VERIFICAÇÃO CRÍTICA: service._available é a FLAG MESTRE
-            if not service._available:
+            # ✅ LÓGICA DE DISPONIBILIDADE UNIFICADA
+            is_available = check_service_availability_after_service_step(service)
+            
+            if not is_available:
                 user.delays[str(app.id)] = float('inf')
-                print(f"[DEBUG_DELAYS] App {app.id}: INDISPONÍVEL (_available=False) - Delay = inf")
-                
-                # Debug adicional
-                if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
-                    last_migration = service._Service__migrations[-1]
-                    if last_migration["end"] is None:
-                        print(f"        Status migração: {last_migration.get('status', 'unknown')}")
-                
+                print(f"[DEBUG_DELAYS] App {app.id}: INDISPONÍVEL - Delay = inf")
                 continue
             
-            # ✅ Verificações adicionais
-            if not service.server or service.server.status != "available":
-                user.delays[str(app.id)] = float('inf')
-                print(f"[DEBUG_DELAYS] App {app.id}: INDISPONÍVEL (servidor indisponível) - Delay = inf")
-                continue
-            
-            # ✅ Serviço realmente disponível - calcular delay
+            # ✅ Serviço disponível - calcular delay para o servidor ATUAL
+            # Se estiver em Live Migration, service.server aponta para Origem, então o delay será calculado corretamente
             user.set_communication_path(app=app)
             new_delay = user._compute_delay(app=app, metric="latency")
             user.delays[str(app.id)] = new_delay
-            print(f"[DEBUG_DELAYS] App {app.id}: DISPONÍVEL - Delay = {new_delay}")
+            print(f"[DEBUG_DELAYS] App {app.id}: DISPONÍVEL em {service.server.id} - Delay = {new_delay}")
 
 
 def check_service_availability_after_service_step(service):
@@ -1304,7 +1464,12 @@ def check_service_availability_after_service_step(service):
     
     # Caso 2: Migração ativa
     if last_migration["end"] is None:
-        return False  # INDISPONÍVEL
+        # ✅ NOVA LÓGICA: Se estiver rodando na origem (Live Migration) e origem disponível
+        if service.server == last_migration.get("origin"):
+            if service.server and service.server.status == "available":
+                return True
+        
+        return False  # Indisponível (Cold migration ou Cutover)
     
     # Caso 3 e 4: Migração finalizada
     current_step = service.model.schedule.steps + 1
@@ -1641,7 +1806,7 @@ def collect_new_request_metadata(current_step):
                 app_attrs = {
                     "object": app,
                     "delay_sla": app.users[0].delay_slas[str(app.id)],
-                    "delay_score": get_application_delay_score(app),
+                    "delay_cost": get_application_delay_cost(app),
                     "intensity_score": get_application_access_intensity_score(app),
                     "demand_resource": get_normalized_demand(app.services[0]),
                     "delay_urgency": get_delay_urgency(app, user)
@@ -1658,7 +1823,7 @@ def sort_applications_by_priority(apps_metadata):
     return sorted(
         apps_metadata, 
         key=lambda app: (
-        get_norm(metadata=app, attr_name="delay_score", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]) +
+        get_norm(metadata=app, attr_name="delay_cost", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]) +
         get_norm(metadata=app, attr_name="intensity_score", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]) +
         (1 - get_norm(metadata=app, attr_name="demand_resource", min=min_and_max_app["minimum"], max=min_and_max_app["maximum"]))
     ), reverse=True
@@ -1671,13 +1836,8 @@ def process_application_request(app_metadata, all_apps_metadata):
     service = app.services[0]
     
     print(f"\n[LOG] Processando aplicação {app.id}:")
-    print(f"      Delay Score: {app_metadata['delay_score']:.4f}")
+    print(f"      Delay Cost: {app_metadata['delay_cost']:.4f}")
     print(f"      SLA: {app_metadata['delay_sla']}")
-    
-    # Verificar se já está provisionado
-    # if service.server:
-    #     print(f"[LOG] Serviço já hospedado no servidor {service.server.id}")
-    #     return
     
     # Verificar se está na fila de espera
     if is_application_in_waiting_queue(app.id):
@@ -1690,9 +1850,9 @@ def process_application_request(app_metadata, all_apps_metadata):
         #min_and_max_app = find_minimum_and_maximum(metadata=all_apps_metadata)
         print(f"[LOG] Adicionando aplicação {app.id} à fila de espera")
         priority_score = app_metadata["delay_urgency"]
-        add_to_waiting_queue(user, app, service, priority_score)
+        add_to_waiting_queue(user, app, service, priority_score, reason="initial_provisioning")
 
-def try_provision_service(user, app, service):
+def try_provision_service(user, app, service, reason=None):
     """Tenta provisionar um serviço com relacionamentos antecipados."""
     
     edge_servers = get_host_candidates(user=user, service=service)
@@ -1701,7 +1861,8 @@ def try_provision_service(user, app, service):
         print(f"[LOG] Nenhum servidor disponível para aplicação {app.id}")
         return False
     
-    edge_servers = sort_host_candidates(edge_servers)
+    delay_sla = user.delay_slas[str(app.id)]
+    edge_servers = sort_host_candidates(edge_servers, delay_sla=delay_sla)
     
     for edge_server_metadata in edge_servers:
         edge_server = edge_server_metadata["object"]
@@ -1730,7 +1891,24 @@ def try_provision_service(user, app, service):
                 if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
                     migration = service._Service__migrations[-1]
                     migration["relationships_created_by_algorithm"] = True
-                    migration["is_initial_provisioning"] = True
+                    
+                    # ✅ LÓGICA CORRIGIDA DE RAZÃO
+                    if original_server is None:
+                        # Se veio da fila com motivo específico (ex: server_failed), usa ele
+                        if reason == "server_failed":
+                            migration["is_initial_provisioning"] = False # Tecnicamente é uma recuperação
+                            migration["migration_reason"] = "server_failed"
+                        # Se o motivo for explicitamente initial_provisioning
+                        elif reason == "initial_provisioning":
+                            migration["is_initial_provisioning"] = True
+                            migration["migration_reason"] = "Initial Provisioning"
+                        # Fallback para Initial Provisioning apenas se não houver razão clara
+                        else:
+                            migration["is_initial_provisioning"] = True
+                            migration["migration_reason"] = "Initial Provisioning"
+                    else:
+                        migration["is_initial_provisioning"] = False
+                        migration["migration_reason"] = reason if reason else "Reprovisioning (Forced)"
                     
                     print(f"[LOG] Provisionamento iniciado - Origin: {migration['origin'].id if migration['origin'] else 'None'}, Target: {migration['target'].id}")
                 
@@ -1752,8 +1930,11 @@ def try_provision_service(user, app, service):
     print(f"[LOG] ✗ Servidores sem capacidade para aplicação {app.id}")
     return False
 
-def sort_host_candidates(edge_servers):
-    """Ordena candidatos por adequação para hospedagem."""
+def sort_host_candidates(edge_servers, delay_sla=None):
+    """
+    Ordena candidatos usando uma Função de Custo Ponderada (Weighted Cost Function).
+    Objetivo: Balancear adesão ao SLA com o custo de downtime (download de camadas).
+    """
     if not edge_servers:
         return edge_servers
     
@@ -1769,13 +1950,25 @@ def sort_host_candidates(edge_servers):
     
     min_and_max = find_minimum_and_maximum(metadata=numeric_metadata)
     
+    # PESOS DA HEURÍSTICA (Ajuste Fino)
+    # WEIGHT_DOWNLOAD = 2.0  -> Prioriza muito evitar downloads (reduz Downtime)
+    # WEIGHT_SLA      = 1.0  -> Penaliza violação de SLA linearmente
+    # WEIGHT_TRUST    = 0.5  -> Critério de desempate
+    
     return sorted(
         edge_servers,
         key=lambda s: (
-            s["sla_violations"],
-            get_norm(metadata=s, attr_name="trust_cost", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
-            get_norm(metadata=s, attr_name="amount_of_uncached_layers", min=min_and_max["minimum"], max=min_and_max["maximum"]) +
-            get_norm(metadata=s, attr_name="overall_delay", min=min_and_max["minimum"], max=min_and_max["maximum"]),
+            # 1. Custo de SLA (Ratio: Delay / SLA)
+            # Se delay for metade do SLA (0.5), custo baixo. Se for dobro (2.0), custo alto.
+            (s["overall_delay"] / delay_sla * 1.0 if delay_sla and delay_sla > 0 else s["sla_violations"] * 10.0)
+            +
+            # 2. Custo de Download (Normalizado 0-1 * Peso)
+            # Se tiver que baixar tudo (1.0), adiciona 2.0 ao score.
+            # Isso significa que vale a pena violar o SLA em até 2x (Ratio 2.0) para evitar um download completo.
+            (get_norm(metadata=s, attr_name="amount_of_uncached_layers", min=min_and_max["minimum"], max=min_and_max["maximum"]) * 2.0)
+            +
+            # 3. Custo de Confiança (Tie-breaker)
+            (get_norm(metadata=s, attr_name="trust_cost", min=min_and_max["minimum"], max=min_and_max["maximum"]) * 0.5)
         ),
     )
 
