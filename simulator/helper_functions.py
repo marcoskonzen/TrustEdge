@@ -7,7 +7,9 @@ import networkx as nx
 from json import dumps
 from random import sample, randint
 import math  # Adicionado para cálculos matemáticos mais precisos
-from math import isinf
+from math import isinf, sqrt
+import numpy as np
+from scipy import stats
 
 # Importing EdgeSimPy components
 from edge_sim_py import *
@@ -24,9 +26,12 @@ class SimulationMetrics:
     def reset_all(self):
         """Resets all metrics to their initial state."""
         # SLA metrics
+        self.total_delay_sla_violations = 0 
         self.sla_violations = 0
         self.delay_violations_per_delay_sla = {}
         self.delay_violations_per_access_pattern = {}
+        self.delay_violations_per_application = {}
+        self.total_perceived_downtime = 0
 
         # Downtime Reasons Metrics (NOVO)
         self.downtime_reasons = {}
@@ -51,6 +56,7 @@ class SimulationMetrics:
         """
         # Acumular violações totais
         self.sla_violations += user_violations['delay_sla_violations']
+        self.total_delay_sla_violations += user_violations['delay_sla_violations']  # ✅ ADICIONAR
         
         # Acumular violações por delay SLA
         for delay_sla, violations in user_violations['delay_violations_per_delay_sla'].items():
@@ -63,7 +69,7 @@ class SimulationMetrics:
             self.delay_violations_per_access_pattern[duration] = (
                 self.delay_violations_per_access_pattern.get(duration, 0) + violations
             )
-
+    
     def add_downtime_reason(self, reason):
         """Incrementa o contador para um motivo específico de downtime."""
         if reason not in self.downtime_reasons:
@@ -149,9 +155,9 @@ class SimulationMetrics:
         total_servers = 0
         
         for model_name, avg_occupation in avg_available_occupation_per_model.items():
-            servers_count = self.total_servers_per_model.get(model_name, 0)
-            total_weighted_available += avg_occupation * servers_count
-            total_servers += servers_count
+            num_servers = self.total_servers_per_model.get(model_name, 0)
+            total_weighted_available += avg_occupation * num_servers
+            total_servers += num_servers
         
         avg_available_overall_occupation = (
             total_weighted_available / total_servers 
@@ -163,8 +169,15 @@ class SimulationMetrics:
         for model_name, server_set in self.active_servers_per_model.items():
             active_servers_count_per_model[model_name] = len(server_set)
 
-        # Coletar métricas de downtime NO FINAL da simulação
-        user_total_perceived_downtime = 0
+        # ═══════════════════════════════════════════════════════════════
+        # ✅ CORREÇÃO: USAR downtime_reasons COMO FONTE DE VERDADE
+        # ═══════════════════════════════════════════════════════════════
+        # O downtime REAL é a soma de todos os registros em downtime_reasons
+        user_total_perceived_downtime = sum(self.downtime_reasons.values())
+        
+        # ═══════════════════════════════════════════════════════════════
+        # ✅ CORREÇÃO: CALCULAR VIOLAÇÕES DE SLA DE DOWNTIME POR SESSÃO
+        # ═══════════════════════════════════════════════════════════════
         total_perceived_downtime_per_access_pattern = {}
         total_perceived_downtime_per_delay_sla = {}
         total_violations_sla_downtime = 0
@@ -172,67 +185,106 @@ class SimulationMetrics:
         total_violations_per_access_pattern = {}
         total_violations_per_delay_sla = {}
 
+        # ✅ NOVO: Mapear downtime_reasons para access_pattern e delay_sla
+        # Como downtime_reasons não tem app_id, precisamos extrair de Service.all()
+        
+        # Primeiro, criar mapeamento service_id -> (app_id, access_pattern, delay_sla)
+        service_metadata = {}
         for user in User.all():
             for app in user.applications:
-                access_pattern = user.access_patterns[str(app.id)]
-                duration = access_pattern.duration_values[0]
-                delay_sla = user.delay_slas[str(app.id)]
-
-                # Verificar se tem histórico de downtime
-                if not hasattr(user, 'user_perceived_downtime_history'):
-                    continue
-                    
-                if str(app.id) not in user.user_perceived_downtime_history:
-                    continue
+                app_id = str(app.id)
+                service = app.services[0]
                 
-                downtime_history = user.user_perceived_downtime_history[str(app.id)]
+                access_pattern = user.access_patterns[app_id]
+                duration = access_pattern.duration_values[0] if access_pattern.duration_values else 0
+                delay_sla = user.delay_slas[app_id]
+                downtime_sla = user.maximum_downtime_allowed.get(app_id, float('inf'))
                 
-                # Contar APENAS os True (downtime percebido quando usuário tentou acessar)
-                perceived_downtime = sum(1 for status in downtime_history if status is True)
+                service_metadata[service.id] = {
+                    'app_id': app_id,
+                    'user': user,
+                    'access_pattern_duration': duration,
+                    'delay_sla': delay_sla,
+                    'downtime_sla': downtime_sla,
+                    'access_history': access_pattern.history
+                }
+        
+        # ✅ Processar downtime_reasons e acumular por access_pattern/delay_sla
+        # IMPORTANTE: downtime_reasons tem formato "categoria_detalhada"
+        # Mas NÃO tem service_id diretamente. Precisamos de outra abordagem.
+        
+        # ✅ ALTERNATIVA: Iterar sobre SERVIÇOS e suas migrações/provisionamentos
+        for service in Service.all():
+            if service.id not in service_metadata:
+                continue  # Serviço sem usuário associado
+            
+            meta = service_metadata[service.id]
+            app_id = meta['app_id']
+            user = meta['user']
+            duration = meta['access_pattern_duration']
+            delay_sla = meta['delay_sla']
+            downtime_sla = meta['downtime_sla']
+            access_history = meta['access_history']
+            
+            # Obter histórico de downtime percebido (se existir)
+            if hasattr(user, '_perceived_downtime') and app_id in user._perceived_downtime:
+                total_downtime_for_app = user._perceived_downtime[app_id]
                 
-                # Debug para verificar
-                total_access_attempts = len(downtime_history)
-                successful_accesses = sum(1 for status in downtime_history if status is False)
-                
-                # print(f"[DEBUG METRICS] App {app.id}:")
-                # print(f"                Total access attempts: {total_access_attempts}")
-                # print(f"                Successful accesses: {successful_accesses}")
-                # print(f"                Downtime occurrences: {perceived_downtime}")
-                # print(f"                Downtime rate: {(perceived_downtime/total_access_attempts*100):.1f}%" if total_access_attempts > 0 else "                Downtime rate: 0%")
-                
-                user_total_perceived_downtime += perceived_downtime
-
-                    
+                # Acumular por access_pattern e delay_sla
                 if duration not in total_perceived_downtime_per_access_pattern:
                     total_perceived_downtime_per_access_pattern[duration] = 0
-                total_perceived_downtime_per_access_pattern[duration] += perceived_downtime
-
+                total_perceived_downtime_per_access_pattern[duration] += total_downtime_for_app
                 
                 if delay_sla not in total_perceived_downtime_per_delay_sla:
                     total_perceived_downtime_per_delay_sla[delay_sla] = 0
-                total_perceived_downtime_per_delay_sla[delay_sla] += perceived_downtime
-
-                user_maximum_downtime_allowed = user.maximum_downtime_allowed[str(app.id)]
+                total_perceived_downtime_per_delay_sla[delay_sla] += total_downtime_for_app
                 
-                if perceived_downtime > user_maximum_downtime_allowed:
-                    app_violation = 1
-                    total_violations_sla_downtime += app_violation
-                    apps_violations_sla_downtime.append(app.id)
-
-                    if duration not in total_violations_per_access_pattern:
-                        total_violations_per_access_pattern[duration] = 0
-                    total_violations_per_access_pattern[duration] += app_violation
-
-                    if delay_sla not in total_violations_per_delay_sla:
-                        total_violations_per_delay_sla[delay_sla] = 0
-                    total_violations_per_delay_sla[delay_sla] += app_violation
-
-                
+                # ✅ Analisar SESSÕES INDIVIDUAIS para violações de SLA
+                for session in access_history:
+                    session_start = session.get('start')
+                    session_end = session.get('end')
+                    
+                    if session_start is None or session_end is None:
+                        continue
+                    
+                    # Calcular downtime NESTA SESSÃO específica
+                    # PROBLEMA: _perceived_downtime[app_id] é um CONTADOR TOTAL, não histórico por step
+                    # Solução: Se houver user_perceived_downtime_history, usar ele
+                    session_downtime = 0
+                    
+                    if (hasattr(user, 'user_perceived_downtime_history') and 
+                        app_id in user.user_perceived_downtime_history):
+                        downtime_history = user.user_perceived_downtime_history[app_id]
+                        
+                        # Contar downtime durante esta sessão
+                        for step in range(session_start, session_end + 1):
+                            step_index = step - 1  # Histórico começa em índice 0
+                            if step_index < len(downtime_history):
+                                if downtime_history[step_index]:  # True = downtime
+                                    session_downtime += 1
+                    
+                    # ✅ VERIFICAR SE ESTA SESSÃO VIOLOU O SLA DE DOWNTIME
+                    if session_downtime > downtime_sla:
+                        total_violations_sla_downtime += 1
+                        
+                        # Adicionar app à lista de violadores (sem duplicar)
+                        if app_id not in apps_violations_sla_downtime:
+                            apps_violations_sla_downtime.append(app_id)
+                        
+                        # Contabilizar por access pattern
+                        if duration not in total_violations_per_access_pattern:
+                            total_violations_per_access_pattern[duration] = 0
+                        total_violations_per_access_pattern[duration] += 1
+                        
+                        # Contabilizar por delay SLA
+                        if delay_sla not in total_violations_per_delay_sla:
+                            total_violations_per_delay_sla[delay_sla] = 0
+                        total_violations_per_delay_sla[delay_sla] += 1
 
         return {
             "total_simulation_steps": self.simulation_steps,
             "=========== SLA metrics ===========": None,
-            "total_delay_sla_violations": self.sla_violations,
+            "total_delay_sla_violations": self.total_delay_sla_violations,
             "delay_violations_per_delay_sla": dict(self.delay_violations_per_delay_sla),
             "delay_violations_per_access_pattern": dict(self.delay_violations_per_access_pattern),
             "total_perceived_downtime": user_total_perceived_downtime,
@@ -255,17 +307,22 @@ class SimulationMetrics:
 
             "=========== Downtime Analysis ===========": None,
             "downtime_reasons": dict(self.downtime_reasons),
-
-            "=========== Infrastructure metrics ===========": None,
-            "total_servers_per_model": dict(self.total_servers_per_model),
-            "total_overloaded_servers": self.total_overloaded_servers,
-            "average_overall_occupation": avg_overall_occupation,
-            
-            
         }
 
 
 _simulation_metrics = SimulationMetrics()
+_predict_failures_log_guard = set()
+
+def _cleanup_predict_failures_log_guard(current_step):
+    """Limpa guard de logs de previsões antigas."""
+    global _predict_failures_log_guard
+    
+    if current_step % 100 == 0:
+        cutoff = current_step - 100
+        _predict_failures_log_guard = {k for k in _predict_failures_log_guard if k[0] >= cutoff}
+        
+        # ✅ Log opcional (comentar em produção)
+        # print(f"[CLEANUP] Guard de predict_failures limpo (mantendo últimos 100 steps)")
 
 
 def get_simulation_metrics():
@@ -1015,25 +1072,33 @@ def get_sla_violations(user) -> dict:
     
     # Collecting delay SLA metrics
     for app in user.applications:
+        # Só conta se o usuário está acessando
         if not is_user_accessing_application(user, app, current_step):
             continue
 
-        user.set_communication_path(app=app)
+        service = app.services[0]
         delay_sla = user.delay_slas[str(app.id)]
-        delay = user._compute_delay(app=app, metric="latency")
         access_pattern = user.access_patterns[str(app.id)]
         duration = access_pattern.duration_values[0]
-        service = app.services[0]
-        
-        # ✅ Se está na fila (sem servidor) ou delay infinito, conta violação
-        if not service.server:
+
+        # 🛑 CORREÇÃO CRÍTICA:
+        # Se o serviço não tem servidor OU o servidor está FALHO/DESLIGADO/BOOTING
+        # O delay é INFINITO (serviço inacessível).
+        # Antes, isso calculava apenas "latência de rede", ignorando que o servidor estava morto.
+        if not service.server or not service.server.available:
             delay = float('inf')
         else:
             user.set_communication_path(app=app)
             delay = user._compute_delay(app=app, metric="latency")
+        
+        # Lógica de Live Migration (Opcional, para refinar):
+        # Se for Live Migration, o service.server aponta para ORIGEM.
+        # Se a origem está viva (server.available=True), o delay acima (calculado para origem) está CORRETO.
+        # Então não precisamos de lógica extra aqui, o check de 'service.server.available' já cobre.
 
         if delay > delay_sla or isinf(delay):
             delay_sla_violations += 1
+            # ...existing code... (contabilização nos dicionários)
             delay_violations_per_delay_sla[delay_sla] = delay_violations_per_delay_sla.get(delay_sla, 0) + 1
             delay_violations_per_access_pattern[duration] = delay_violations_per_access_pattern.get(duration, 0) + 1
 
@@ -1046,97 +1111,186 @@ def get_sla_violations(user) -> dict:
 
 def update_user_perceived_downtime_for_current_step(current_step):
     """
-    Atualiza o downtime percebido por todos os usuários no step atual.
+    Atualiza downtime percebido de forma CENTRALIZADA e CONSISTENTE.
     
-    Esta função deve ser chamada UMA VEZ por step por cada algoritmo.
+    REGRAS CORRIGIDAS:
+    1. Downtime SOMENTE quando delay = inf E usuário está acessando
+    2. Classificar causa usando is_service_available_for_user()
+    3. Contabilizar por usuário e globalmente
     """
-    print()
-    print("=" * 70)
-    print(f"[DEBUG_DOWNTIME] === MONITORANDO O DOWNTIME PERCEBIDO - STEP {current_step} ===")
-    print("=" * 70)
     
     metrics = get_simulation_metrics()
-
+    total_downtime_this_step = 0
+    
+    # ✅ REMOVER logs excessivos (só manter se DEBUG ativo)
+    DEBUG_DOWNTIME = False  # Alterar para True se precisar debugar
+    
+    if DEBUG_DOWNTIME:
+        print(f"\n{'='*70}")
+        print(f"[DEBUG_DOWNTIME] === MONITORANDO O DOWNTIME PERCEBIDO - STEP {current_step} ===")
+        print(f"{'='*70}")
+    
     for user in User.all():
-        # Inicializar histórico se não existir
-        if not hasattr(user, "user_perceived_downtime_history"):
+        if not hasattr(user, '_perceived_downtime'):
+            user._perceived_downtime = {}
+        
+        # ✅ GARANTIR: Inicializar user_perceived_downtime_history
+        if not hasattr(user, 'user_perceived_downtime_history'):
             user.user_perceived_downtime_history = {}
         
         for app in user.applications:
             app_id = str(app.id)
+            service = app.services[0]
             
-            # Inicializar histórico da aplicação se não existir
+            # ✅ GARANTIR: Inicializar histórico para este app
             if app_id not in user.user_perceived_downtime_history:
                 user.user_perceived_downtime_history[app_id] = []
             
-            # Verificar se usuário está fazendo requisição no step atual
-            is_making_access = is_user_accessing_application(user, app, current_step)
+            # ✅ REGRA: Só conta downtime se usuário ESTÁ acessando
+            if not is_user_accessing_application(user, app, current_step):
+                # ✅ IMPORTANTE: Adicionar False ao histórico mesmo quando não está acessando
+                # Isso mantém sincronização entre step e índice do array
+                user.user_perceived_downtime_history[app_id].append(False)
+                continue
             
-            service = app.services[0]
-            app_available = True
-            downtime_reason = None
-
-            # 1. Verificar se está na fila de espera (DOWNTIME)
-            # Se estiver na fila, consideramos downtime se o usuário estiver tentando acessar
-            # OU se for uma falha de servidor (interrupção de serviço contínuo)
-            waiting_reason = getattr(service, "_waiting_reason", None)
+            # ✅ Verificar disponibilidade
+            is_available, unavailability_reason = is_service_available_for_user(
+                service, user, app, current_step
+            )
             
-            if not service.server:
-                app_available = False
-                if waiting_reason == "server_failed":
-                    downtime_reason = "Waiting in Queue (Server Failure)"
-                else:
-                    downtime_reason = "Waiting in Global Queue (No Host)"
+            # ✅ CRÍTICO: Adicionar ao histórico (True = downtime, False = disponível)
+            user.user_perceived_downtime_history[app_id].append(not is_available)
             
-            # 2. Verificar se o servidor está falho (SÓ SE TIVER SERVIDOR)
-            elif service.server and service.server.status != "available":
-                app_available = False
-                waiting_reason = getattr(service, "_waiting_reason", None)
+            if not is_available:
+                # ✅ DOWNTIME DETECTADO
+                total_downtime_this_step += 1
                 
-                if waiting_reason:
-                    downtime_reason = "Waiting in Queue"
-                else:
-                    downtime_reason = "Server Failure"
-            
-            # 3. Verificar flag de disponibilidade do serviço (Provisionamento/Migração)
-            elif not service._available:
-                app_available = False
-                downtime_reason = "Unknown Unavailable State" # Fallback
+                # Contabilizar por usuário (para compatibilidade)
+                if app_id not in user._perceived_downtime:
+                    user._perceived_downtime[app_id] = 0
+                user._perceived_downtime[app_id] += 1
                 
-                # Tentar descobrir o estado exato olhando para as migrações
-                if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
-                    last_migration = service._Service__migrations[-1]
+                # ✅ Classificar causa DETALHADA
+                detailed_cause = _classify_downtime_cause_v2(
+                    user, app, service, current_step, unavailability_reason
+                )
+                
+                # Contabilizar globalmente por causa
+                if detailed_cause not in metrics.downtime_reasons:
+                    metrics.downtime_reasons[detailed_cause] = 0
+                metrics.downtime_reasons[detailed_cause] += 1
+                
+                # ✅ LOG (só primeiras 3 ocorrências de cada causa)
+                if DEBUG_DOWNTIME and metrics.downtime_reasons[detailed_cause] <= 3:
+                    server_info = f"{service.server.id} (disponível: {service.server.available})" if service.server else "None"
                     
-                    # Se a migração/provisionamento ainda não terminou
-                    if last_migration["end"] is None:
-                        raw_status = last_migration.get("status")
-                        
-                        # ✅ MAPEAMENTO DE STATUS PARA RAZÕES LEGÍVEIS
-                        if raw_status == "waiting":
-                            downtime_reason = "Waiting in Server Queue (Download)"
-                        elif raw_status == "pulling_layers":
-                            downtime_reason = "Downloading Layers"
-                        elif raw_status == "migrating_service_state":
-                            downtime_reason = "Transferring State"
-                        else:
-                            downtime_reason = f"Operation Status: {raw_status}"
+                    print(f"[DEBUG_DOWNTIME] User {user.id} | App {app.id} | Service {service.id}")
+                    print(f"                 Causa: {detailed_cause}")
+                    print(f"                 Delay atual: {user.delays.get(app_id, 0)}")
+                    print(f"                 Status serviço: available={service._available}")
+                    print(f"                 Servidor: {server_info}")
+    
+    # ✅ Atualizar total global
+    metrics.total_perceived_downtime += total_downtime_this_step
+    
+    if DEBUG_DOWNTIME:
+        print(f"{'='*70}\n")
+    
+    # ✅ Log periódico (simplificado)
+    if current_step % 100 == 0 and total_downtime_this_step > 0:
+        print(f"[DOWNTIME_SUMMARY] Step {current_step}: {total_downtime_this_step} steps de downtime")
+        print(f"                   Total acumulado: {metrics.total_perceived_downtime}")
 
-            # REGISTRAR HISTÓRICO
-            # Se o app não está disponível E (usuário acessando OU falha de servidor), conta como downtime
-            # Falhas de servidor afetam a disponibilidade percebida mesmo fora da janela estrita de acesso em alguns modelos,
-            # mas para manter consistência com 'perceived', usamos is_making_access.
-            # PORÉM, se o serviço caiu (server_failed), o usuário PERCEBE a queda se tentar usar.
-            
-            is_downtime = not app_available and is_making_access
-            
-            user.user_perceived_downtime_history[app_id].append(is_downtime)
-            
-            if is_downtime and downtime_reason:
-                metrics.add_downtime_reason(downtime_reason)
-                print(f"[DEBUG_DOWNTIME] App {app.id}: DOWNTIME ({downtime_reason}) - Step {current_step}")
-            elif is_making_access:
-                print(f"[DEBUG_DOWNTIME] App {app.id} (server {service.server.id if service.server else 'None'}): Available - Step {current_step}")
 
+def _classify_downtime_cause(user, app, service, current_step):
+    """
+    Classifica causa do downtime em categorias detalhadas.
+    
+    Retorna string com a categoria (ex: "migration_downloading_layers").
+    """
+    # Verificar se há migração ativa
+    if hasattr(service, '_Service__migrations') and service._Service__migrations:
+        migration = service._Service__migrations[-1]
+        
+        if migration.get("end") is None:  # Migração ativa
+            status = migration.get("status", "unknown")
+            origin = migration.get("origin")
+            
+            # ✅ CORRIGIDO: Usar original_migration_reason com fallback robusto
+            original_reason = migration.get("original_migration_reason")
+            
+            # ✅ FALLBACK: Se original_reason for None/vazio, tentar inferir
+            if not original_reason or original_reason == "unknown":
+                migration_reason = migration.get("migration_reason", "unknown")
+                
+                # Tentar inferir da migration_reason
+                if migration_reason == "server_failed":
+                    # Verificar se é Cold Migration
+                    if migration.get("is_cold_migration", False):
+                        original_reason = "server_failed_unpredicted"
+                    elif migration.get("is_recovery_after_prevention", False):
+                        original_reason = "low_reliability"  # Assumir low_reliability como padrão
+                    else:
+                        original_reason = "server_failed_unpredicted"  # Conservador
+                else:
+                    original_reason = migration_reason if migration_reason else "unknown"
+                
+                # ✅ LOG DE DEBUG
+                print(f"[CLASSIFY_DOWNTIME] ⚠️ original_reason vazio! Inferido: '{original_reason}' (migration_reason: '{migration_reason}')")
+            
+            # ✅ MIGRAÇÃO ATIVA
+            if origin is None:
+                # PROVISIONAMENTO
+                if status == "waiting":
+                    # ✅ Verificar se está na fila de espera GLOBAL
+                    from simulator.algorithms.trust_edge_v3 import is_application_in_waiting_queue
+                    if is_application_in_waiting_queue(app.id):
+                        return "provisioning_waiting_in_global_queue"
+                    else:
+                        return "provisioning_waiting_in_download_queue"
+                
+                elif status == "pulling_layers":
+                    return "provisioning_downloading_layers"
+                
+                else:
+                    return "provisioning_other"
+            
+            else:
+                # MIGRAÇÃO (origin != None)
+                
+                if status == "waiting":
+                    # ✅ Verificar se está na fila de espera GLOBAL
+                    from simulator.algorithms.trust_edge_v3 import is_application_in_waiting_queue
+                    if is_application_in_waiting_queue(app.id):
+                        return f"migration_{original_reason}_waiting_in_global_queue"
+                    else:
+                        return f"migration_{original_reason}_waiting_in_download_queue"
+                
+                elif status == "pulling_layers":
+                    # Cold migration (origem indisponível)
+                    if not origin.available:
+                        return f"migration_{original_reason}_downloading_layers_cold"
+                    else:
+                        # Não deveria estar indisponível (Live Migration)
+                        return f"migration_{original_reason}_downloading_layers_live_error"
+                
+                elif status == "migrating_service_state":
+                    return f"migration_{original_reason}_cutover"
+                
+                else:
+                    return f"migration_{original_reason}_other"
+    
+    # ✅ SEM MIGRAÇÃO ATIVA → Serviço órfão ou servidor falhou
+    if service.server is None or not service.server.available:
+        # Verificar se está na fila de espera
+        from simulator.algorithms.trust_edge_v3 import is_application_in_waiting_queue
+        if is_application_in_waiting_queue(app.id):
+            return "server_failure_orphaned_in_queue"
+        else:
+            return "server_failure_orphaned_no_migration_yet"
+    
+    # ✅ CASO NÃO CLASSIFICADO
+    return "downtime_unclassified"
 
 def get_user_perceived_downtime_count(application):
     """
@@ -1173,7 +1327,7 @@ def init_failure_reliability_tracking():
     _failure_reliability_events = []
     _failure_reliability_seen = set()
 
-def record_server_failure_reliability(current_step, horizon=10):
+def record_server_failure_reliability(current_step, horizon=50):
     """
     Registra a confiabilidade do servidor no exato step em que a falha inicia.
     Usa failure_trace (planejado) para identificar o início da falha.
@@ -1194,7 +1348,7 @@ def record_server_failure_reliability(current_step, horizon=10):
             if key in _failure_reliability_seen:
                 continue
 
-            reliability_pct = get_server_conditional_reliability(server, horizon)
+            reliability_pct = get_server_conditional_reliability_weibull(server, horizon) 
             _failure_reliability_events.append({
                 "server_id": server.id,
                 "step": starts_at,
@@ -1322,31 +1476,524 @@ def get_server_conditional_reliability(server, upcoming_instants):
     return (math.exp(-server_failure_rate * upcoming_instants)) * 100
 
 def get_time_since_last_repair(server):
-    """Calcula tempo desde último reparo."""
-    if not server.failure_model.failure_history:
-        return float("inf")
+    """
+    Retorna tempo desde a última recuperação.
     
-    current_step = server.model.schedule.steps
-    if is_ongoing_failure(server, current_step):
-        return 0
+    ✅ CORREÇÃO: Para servidores que nunca falharam na simulação atual,
+    usa o tempo desde a última falha do HISTÓRICO.
+    """
+    current_step = server.model.schedule.steps + 1
     
-    # Encontrar reparo mais recente
-    sorted_history = sorted(
-        server.failure_model.failure_history, 
-        key=lambda x: x["becomes_available_at"], 
-        reverse=True
-    )
+    # Verificar se tem falhas no histórico da SIMULAÇÃO ATUAL
+    if hasattr(server, 'failure_model') and server.failure_model.failure_history:
+        # Obter última falha do histórico
+        last_failure = server.failure_model.failure_history[-1]
+        
+        # Se a falha está no PASSADO (histórico pré-carregado)
+        if last_failure['becomes_available_at'] < 0:
+            # Servidor nunca falhou na simulação atual
+            # Usar tempo desde o início da simulação
+            return current_step
+        
+        # Se já falhou na simulação atual
+        if last_failure['becomes_available_at'] < current_step:
+            return current_step - last_failure['becomes_available_at']
+        
+        # Se está em falha AGORA
+        if last_failure['failure_starts_at'] <= current_step < last_failure['becomes_available_at']:
+            return 0  # Acabou de falhar
     
-    last_repair = None
-    for failure in sorted_history:
-        if failure["becomes_available_at"] <= current_step:
-            last_repair = failure
-            break
+    # Fallback: Servidor nunca falhou (nem no histórico)
+    # Retornar tempo desde início da simulação
+    return current_step
+
+
+def get_server_availability(server: object) -> float:
+    """
+    Calcula disponibilidade histórica do servidor.
     
-    if last_repair:
-        return current_step + 1 - last_repair["becomes_available_at"]
+    Availability = MTBF / (MTBF + MTTR)
+    """
+    mtbf = get_server_mtbf(server)
+    mttr = get_server_mttr(server)
     
-    return float("inf")
+    if mtbf == float('inf'):
+        return 100.0
+    
+    if mtbf + mttr == 0:
+        return 0.0
+    
+    availability = (mtbf / (mtbf + mttr)) * 100
+    return availability
+
+
+# ============================================================================
+# WEIBULL PARAMETER ESTIMATION (MLE from History)
+# ============================================================================
+
+def estimate_weibull_parameters_from_history(server, window_size=10):
+    """
+    Estima parâmetros Weibull usando janela deslizante das N falhas mais recentes.
+    
+    Args:
+        server: Servidor a analisar
+        window_size: Número de falhas mais recentes a considerar (padrão: 10)
+    
+    Returns:
+        dict: Parâmetros estimados com metadados de qualidade
+    """
+    if not hasattr(server, 'failure_model') or not server.failure_model:
+        return _default_weibull_params()
+    
+    failure_history = server.failure_model.failure_history
+    
+    if not failure_history or len(failure_history) < 2:
+        return _default_weibull_params()
+    
+    # ✅ NOVO: Usar apenas as N falhas mais recentes (janela deslizante)
+    sorted_failures = sorted(failure_history, key=lambda f: f['failure_starts_at'])
+    recent_failures = sorted_failures[-window_size:] if len(sorted_failures) > window_size else sorted_failures
+    
+    tbf_data = []
+    ttr_data = []
+    
+    for i in range(len(recent_failures)):
+        current_failure = recent_failures[i]
+        
+        # Tempo de reparo (TTR)
+        ttr = current_failure['becomes_available_at'] - current_failure['failure_starts_at']
+        if ttr > 0:
+            ttr_data.append(ttr)
+        
+        # Tempo entre falhas (TBF)
+        if i > 0:
+            previous_failure = recent_failures[i-1]
+            tbf = current_failure['failure_starts_at'] - previous_failure['becomes_available_at']
+            if tbf > 0:
+                tbf_data.append(tbf)
+    
+    if len(tbf_data) < 2:
+        return _default_weibull_params()
+    
+    # Estimação via Maximum Likelihood (MLE)
+    try:
+        tbf_array = np.array(tbf_data)
+        shape_c, loc, scale_lambda = stats.weibull_min.fit(tbf_array, floc=0)
+        
+        # Validação básica
+        if shape_c <= 0 or scale_lambda <= 0 or np.isnan(shape_c) or np.isnan(scale_lambda):
+            raise ValueError("Parâmetros inválidos")
+        
+        # Teste de qualidade (Kolmogorov-Smirnov)
+        quality = _assess_estimation_quality(tbf_array, shape_c, scale_lambda)
+        
+    except Exception:
+        # Fallback: Método dos Momentos
+        shape_c, scale_lambda = _estimate_weibull_method_of_moments(tbf_data)
+        quality = "fallback"
+    
+    # Calcular MTBF e MTTR
+    mtbf_estimated = scale_lambda * np.math.gamma(1 + 1/shape_c)
+    mttr_mean = np.mean(ttr_data) if ttr_data else 1.0
+    
+    return {
+        'tbf_shape': shape_c,
+        'tbf_scale': scale_lambda,
+        'mtbf_estimated': mtbf_estimated,
+        'ttr_mean': mttr_mean,
+        'sample_size': len(tbf_data),
+        'estimation_quality': quality,
+        'window_size_used': len(recent_failures)  # ✅ NOVO: Rastrear tamanho da janela
+    }
+    
+    # ═══════════════════════════════════════════════════════════════
+    # EXTRAIR TEMPOS ENTRE FALHAS (TBF)
+    # ═══════════════════════════════════════════════════════════════
+    tbf_data = []
+    ttr_data = []
+    
+    sorted_history = sorted(failure_history, key=lambda f: f['failure_starts_at'])
+    
+    for i in range(len(sorted_history)):
+        current_failure = sorted_history[i]
+        
+        # Tempo de reparo
+        ttr = current_failure['becomes_available_at'] - current_failure['failure_starts_at']
+        ttr_data.append(ttr)
+        
+        # Tempo entre falhas (TBF)
+        if i > 0:
+            previous_failure = sorted_history[i-1]
+            tbf = current_failure['failure_starts_at'] - previous_failure['becomes_available_at']
+            if tbf > 0:
+                tbf_data.append(tbf)
+    
+    # ═══════════════════════════════════════════════════════════════
+    # ESTIMAR PARÂMETROS WEIBULL PARA TBF
+    # ═══════════════════════════════════════════════════════════════
+    if len(tbf_data) < 2:
+        return _default_weibull_params()
+    
+    tbf_array = np.array(tbf_data)
+    
+    try:
+        # MLE (Maximum Likelihood Estimation)
+        shape_c, loc, scale_lambda = stats.weibull_min.fit(tbf_array, floc=0)
+        
+        # Validação
+        if shape_c <= 0 or scale_lambda <= 0 or not np.isfinite(shape_c) or not np.isfinite(scale_lambda):
+            return _estimate_weibull_method_of_moments(tbf_data, ttr_data)
+        
+        # Estatísticas TTR
+        ttr_mean = np.mean(ttr_data) if ttr_data else 50.0
+        ttr_std = np.std(ttr_data) if len(ttr_data) > 1 else 20.0
+        
+        # Calcular MTBF estimado
+        mtbf_estimated = scale_lambda * math.gamma(1 + 1/shape_c)
+        
+        # Avaliar qualidade
+        quality = _assess_estimation_quality(tbf_data, shape_c, scale_lambda)
+        
+        return {
+            'tbf_shape': shape_c,
+            'tbf_scale': scale_lambda,
+            'ttr_mean': ttr_mean,
+            'ttr_std': ttr_std,
+            'sample_size': len(tbf_data),
+            'estimation_quality': quality,
+            'mtbf_estimated': mtbf_estimated,
+        }
+        
+    except Exception as e:
+        return _estimate_weibull_method_of_moments(tbf_data, ttr_data)
+
+
+def _default_weibull_params():
+    """Retorna parâmetros padrão conservadores quando não há dados suficientes."""
+    return {
+        'tbf_shape': 1.0,
+        'tbf_scale': 1000.0,
+        'ttr_mean': 50.0,
+        'ttr_std': 20.0,
+        'sample_size': 0,
+        'estimation_quality': 'insufficient',
+        'mtbf_estimated': 1000.0,
+    }
+
+
+def _estimate_weibull_method_of_moments(tbf_data, ttr_data):
+    """Método dos Momentos (fallback quando MLE falha)."""
+    tbf_array = np.array(tbf_data)
+    
+    mean_tbf = np.mean(tbf_array)
+    var_tbf = np.var(tbf_array)
+    
+    if var_tbf > 0:
+        cv = sqrt(var_tbf) / mean_tbf
+        shape_c = 1.0 / cv if cv > 0 else 1.0
+    else:
+        shape_c = 1.0
+    
+    scale_lambda = mean_tbf / math.gamma(1 + 1/shape_c)
+    
+    ttr_mean = np.mean(ttr_data) if ttr_data else 50.0
+    ttr_std = np.std(ttr_data) if len(ttr_data) > 1 else 20.0
+    
+    return {
+        'tbf_shape': shape_c,
+        'tbf_scale': scale_lambda,
+        'ttr_mean': ttr_mean,
+        'ttr_std': ttr_std,
+        'sample_size': len(tbf_data),
+        'estimation_quality': 'poor',
+        'mtbf_estimated': mean_tbf,
+    }
+
+
+def _assess_estimation_quality(tbf_data, shape_c, scale_lambda):
+    """Avalia qualidade da estimação baseado em testes estatísticos."""
+    n = len(tbf_data)
+    
+    if n < 3:
+        return 'poor'
+    elif n < 10:
+        return 'fair'
+    
+    try:
+        # Teste Kolmogorov-Smirnov
+        ks_statistic, p_value = stats.kstest(tbf_data, 'weibull_min', args=(shape_c, 0, scale_lambda))
+        
+        if p_value > 0.10:
+            return 'excellent'
+        elif p_value > 0.05:
+            return 'good'
+        else:
+            return 'fair'
+    except:
+        return 'fair'
+
+
+# ============================================================================
+# CONFIABILIDADE CONDICIONAL COM WEIBULL
+# ============================================================================
+
+def get_server_conditional_reliability_weibull(server, upcoming_instants):
+    """
+    Calcula confiabilidade condicional usando parâmetros Weibull estimados.
+    
+    R(t+Δt | t) = exp[-((t+Δt)/λ)^c + (t/λ)^c]
+    """
+    # 1. Estimar parâmetros do histórico (com cache)
+    if not hasattr(server, 'model') or not server.model:
+        current_step = 0
+    else:
+        current_step = server.model.schedule.steps
+    
+    params = get_cached_weibull_parameters(server, current_step)
+    
+    shape_c = params['tbf_shape']
+    scale_lambda = params['tbf_scale']
+    
+    # 2. Calcular tempo desde último reparo
+    time_since_repair = get_time_since_last_repair(server)
+    
+    # 3. Casos especiais
+    if time_since_repair == float('inf'):
+        time_since_repair = 0
+    elif time_since_repair == 0:
+        time_since_repair = 1
+    else:
+        time_since_repair = max(1, time_since_repair)
+    
+    # 4. Fórmula da Confiabilidade Condicional Weibull
+    try:
+        t = time_since_repair
+        delta_t = upcoming_instants
+        
+        exponent1 = ((t + delta_t) / scale_lambda) ** shape_c
+        exponent2 = (t / scale_lambda) ** shape_c
+        
+        conditional_reliability = math.exp(-(exponent1 - exponent2)) * 100
+        return max(0.0, min(100.0, conditional_reliability))
+        
+    except (OverflowError, ZeroDivisionError):
+        return 0.0
+
+
+def get_server_conditional_reliability_weibull_with_confidence(server, upcoming_instants, confidence_level=0.95):
+    """
+    Calcula confiabilidade condicional COM intervalo de confiança baseado na qualidade da estimação.
+    
+    Ajustado para PEQUENAS AMOSTRAS usando decaimento suave (1/sqrt(n)).
+    """
+    params = get_cached_weibull_parameters(server, server.model.schedule.steps)
+    
+    shape_c = params['tbf_shape']
+    scale_lambda = params['tbf_scale']
+    sample_size = params['sample_size']
+    
+    time_since_repair = get_time_since_last_repair(server)
+    
+    # Proteções
+    if time_since_repair == float('inf'):
+        time_since_repair = 0
+    elif time_since_repair == 0:
+        time_since_repair = 1
+    else:
+        time_since_repair = max(1, time_since_repair)
+    
+    # Cálculo pontual da confiabilidade (Weibull)
+    try:
+        t = time_since_repair
+        delta_t = upcoming_instants
+        
+        exponent1 = ((t + delta_t) / scale_lambda) ** shape_c
+        exponent2 = (t / scale_lambda) ** shape_c
+        
+        reliability = math.exp(-(exponent1 - exponent2)) * 100.0
+        reliability = max(0.0, min(100.0, reliability))
+        
+        # ---------------------------------------------------------------------
+        # CÁLCULO DA INCERTEZA (MARGEM DE SEGURANÇA)
+        # ---------------------------------------------------------------------
+        # Problema anterior: Penalidade fixa de 40% para N < 3 gerava falsos positivos massivos.
+        # Solução: Curva de decaimento baseada em 1/sqrt(N).
+        #
+        # Fórmula: Margem = Fator_Base / sqrt(N + 1)
+        # Se N=0 -> Margem = 50% (Totalmente incerto)
+        # Se N=1 -> Margem = 35%
+        # Se N=3 -> Margem = 25%
+        # Se N=10 -> Margem = 15%
+        # Se N=100 -> Margem = 5%
+        
+        # Ajuste este fator: 0.50 significa que com 0 dados, a incerteza é +/- 50%
+        BASE_UNCERTAINTY_FACTOR = 0.50 
+        
+        uncertainty_pct = (BASE_UNCERTAINTY_FACTOR / math.sqrt(sample_size + 1))
+        
+        # Penalidade extra se a qualidade do ajuste (KS-Test) for ruim
+        quality = params.get('estimation_quality', 'fair')
+        if quality == 'poor':
+            uncertainty_pct *= 1.5  # Aumenta incerteza em 50% se o fit for ruim
+        elif quality == 'excellent':
+            uncertainty_pct *= 0.8  # Reduz se o fit for perfeito
+            
+        # Calcular limites
+        # Lower Bound: É o valor que o TrustEdge usa para decidir migrar ("Pior cenário provável")
+        lower_bound = max(0.0, reliability * (1.0 - uncertainty_pct))
+        upper_bound = min(100.0, reliability * (1.0 + uncertainty_pct))
+        
+        # Opcional: Se a confiabilidade for EXTREMAMENTE alta (>99.9%),
+        # a incerteza matemática importa menos. Clamp do limite inferior.
+        if reliability > 99.9:
+            lower_bound = max(lower_bound, 90.0) # Nunca rebaixe um 99.9% para menos de 90% só por incerteza
+        
+        return {
+            'reliability': reliability,
+            'lower_bound': lower_bound,
+            'upper_bound': upper_bound,
+            'uncertainty': (uncertainty_pct * 100),
+            'confidence_level': confidence_level,
+            'sample_size': sample_size
+        }
+        
+    except (OverflowError, ZeroDivisionError):
+        return {
+            'reliability': 0.0,
+            'lower_bound': 0.0,
+            'upper_bound': 0.0,
+            'uncertainty': 100.0,
+            'confidence_level': confidence_level,
+            'sample_size': 0
+        }
+
+
+def predict_next_n_failures(server, n_failures=3, max_horizon=200):
+    """
+    Prevê as próximas N falhas usando distribuição Weibull.
+    """
+    params = get_cached_weibull_parameters(server, server.model.schedule.steps)
+    
+    # ✅ DEBUG: Verificar qualidade da estimação
+    if params.get('sample_size', 0) == 0:
+        print(f"[PREDICT_FAILURES] ⚠️ Server {server.id}: SEM DADOS históricos (sample_size=0)")
+        return []
+    
+    if params.get('estimation_quality') in ['insufficient', 'poor']:
+        print(f"[PREDICT_FAILURES] ⚠️ Server {server.id}: Estimação {params['estimation_quality']} (sample={params['sample_size']})")
+    
+    shape_c = params['tbf_shape']
+    scale_lambda = params['tbf_scale']
+    ttr_mean = params['ttr_mean']
+    
+    current_step = server.model.schedule.steps + 1
+    time_since_repair = get_time_since_last_repair(server)
+    
+    if time_since_repair == float('inf'):
+        time_since_repair = 0
+        print(f"[PREDICT_FAILURES] Server {server.id}: Nunca falhou ainda (time_since_repair=inf)")
+    
+    # ✅ LIMPEZA PERIÓDICA (adicionar AQUI)
+    _cleanup_predict_failures_log_guard(current_step)
+    
+    log_key = (current_step, server.id, max_horizon)
+    should_log = log_key not in _predict_failures_log_guard
+    if should_log:
+        _predict_failures_log_guard.add(log_key)
+
+    predictions = []
+    cumulative_time = time_since_repair
+    failures_checked = 0
+    failures_beyond_horizon = 0
+    
+    for i in range(1, n_failures + 1):
+        try:
+            expected_ttf = scale_lambda * math.gamma(1 + 1/shape_c)
+        except (OverflowError, ValueError):
+            expected_ttf = scale_lambda
+        
+        predicted_time = int(current_step + cumulative_time + expected_ttf)
+        horizon = predicted_time - current_step
+        
+        # ✅ MUDANÇA: Não para, apenas registra e continua
+        if horizon > max_horizon:
+            failures_beyond_horizon += 1
+            if should_log:
+                print(f"[PREDICT_FAILURES] Server {server.id} - Failure {i}: {horizon} steps (além do horizonte)")
+            cumulative_time += expected_ttf + ttr_mean
+            continue
+
+        failures_checked += 1
+        
+        # ✅ Se chegou aqui, está dentro do horizonte
+        # Calcular probabilidade de falha
+        try:
+            # Usando CDF de Weibull
+            probability = (1 - math.exp(-((cumulative_time + expected_ttf) / scale_lambda) ** shape_c)) * 100
+        except (OverflowError, ValueError):
+            probability = 50.0
+        
+        # Calcular downtime esperado
+        expected_downtime = ttr_mean
+        
+        predictions.append({
+            'horizon': horizon,
+            'predicted_step': predicted_time,
+            'probability': min(100.0, probability),
+            'expected_downtime': expected_downtime,
+            'failure_sequence': i
+        })
+        
+        print(f"                   ✅ DENTRO do horizonte - Prob: {probability:.1f}%")
+        
+        # Atualizar tempo acumulado (TTF + TTR)
+        cumulative_time += expected_ttf + ttr_mean
+    
+        if should_log:
+            print(f"                   ✅ DENTRO do horizonte - Prob: {probability:.1f}%")
+
+    if should_log:
+        print(f"[PREDICT_FAILURES] Server {server.id} - Resumo:")
+        print(f"                   Falhas verificadas: {failures_checked}")
+        print(f"                   Além do horizonte: {failures_beyond_horizon}")
+        print(f"                   Dentro do horizonte: {len(predictions)}")
+
+    return predictions
+
+# ============================================================================
+# CACHE DE ESTIMAÇÕES (Otimização de Performance)
+# ============================================================================
+
+_weibull_estimation_cache = {}
+
+def get_cached_weibull_parameters(server, current_step, cache_validity=50):
+    """
+    Retorna parâmetros Weibull com cache (reestima a cada N steps).
+    """
+    server_id = server.id
+    
+    window_size = getattr(server.model, '_trust_edge_window_size', 10)
+    
+    if server_id in _weibull_estimation_cache:
+        cached = _weibull_estimation_cache[server_id]
+        if current_step - cached['updated_at'] < cache_validity:
+            return cached['params']
+    
+    params = estimate_weibull_parameters_from_history(server, window_size=window_size)
+    
+    _weibull_estimation_cache[server_id] = {
+        'params': params,
+        'updated_at': current_step
+    }
+    
+    return params
+
+
+def reset_weibull_estimation_cache():
+    """Limpa cache de estimações (útil entre simulações)."""
+    global _weibull_estimation_cache
+    _weibull_estimation_cache = {}
+
 
 def get_server_trust_cost(server):
     """Calcula custo de risco instantâneo do servidor."""
@@ -1454,37 +2101,471 @@ def get_host_candidates(user: object, service: object) -> list:
         sla_violations = 1 if path_delay > user.delay_slas[str(service.application.id)] else 0
         
         # Calcular métricas do servidor
-        trust_cost = get_server_trust_cost(edge_server)
         user_access_patterns = user.access_patterns[str(service.application.id)]
         service_expected_duration = user_access_patterns.duration_values[0]
-        conditional_reliability = get_server_conditional_reliability(edge_server, service_expected_duration)
         power_consumption = edge_server.power_model_parameters["max_power_consumption"]
         
-        # Calcular camadas não-cached
+        # ✅ NOVO: Calcular tempo REAL de provisionamento
+        provisioning_estimate = estimate_provisioning_time_for_server(
+            target_server=edge_server,
+            service=service,
+            verbose=False
+        )
+        
+        # Confiabilidade usando Weibull
+        weibull_data = get_server_conditional_reliability_weibull_with_confidence(
+            server=edge_server, 
+            upcoming_instants=service_expected_duration
+        )
+        
+        real_weibull_reliability = weibull_data['reliability']
+        
+        # Recalcular trust_cost baseado no Weibull.
+        # Se confiabilidade = 100% (1.0), Custo = 0.0
+        # Se confiabilidade = 0% (0.0), Custo = 1.0
+        trust_cost = 1.0 - (real_weibull_reliability / 100.0)
+        
+        # ✅ SUBSTITUIR: amount_of_uncached_layers POR métricas reais
         service_image = ContainerImage.find_by(attribute_name="digest", attribute_value=service.image_digest)
         service_layers = [ContainerLayer.find_by(attribute_name="digest", attribute_value=digest) 
                          for digest in service_image.layers_digests]
         
-        amount_of_uncached_layers = 0
-        for service_layer in service_layers:
-            is_cached = any(cached_layer.digest == service_layer.digest 
-                           for cached_layer in edge_server.container_layers)
-            if not is_cached:
-                amount_of_uncached_layers += service_layer.size
+        uncached_layers = [layer for layer in service_layers 
+                          if not any(cached.digest == layer.digest for cached in edge_server.container_layers)]
+        
+        # ✅ NOVAS MÉTRICAS:
+        amount_of_uncached_layers = len(uncached_layers)  # Contagem (compatibilidade)
+        total_uncached_mb = sum(layer.size for layer in uncached_layers)  # TAMANHO TOTAL
+        estimated_provisioning_time = provisioning_estimate['total_time_steps']  # TEMPO ESTIMADO
         
         host_candidates.append({
             "object": edge_server,
-            "sla_violations": sla_violations,
-            "trust_cost": trust_cost,
-            "conditional_reliability": conditional_reliability,
-            "power_consumption": power_consumption,
             "overall_delay": path_delay,
-            "amount_of_uncached_layers": amount_of_uncached_layers,
+            "sla_violations": sla_violations,
             "free_capacity": get_normalized_free_capacity(edge_server),
+            "trust_cost": trust_cost,
+            "power_consumption": power_consumption,
+            "reliability_value": real_weibull_reliability,
+            
+            # ✅ Métricas antigas (manter compatibilidade)
+            "amount_of_uncached_layers": amount_of_uncached_layers,
+            
+            # ✅ NOVAS MÉTRICAS DE DOWNLOAD
+            "total_uncached_mb": total_uncached_mb,
+            "estimated_provisioning_time": estimated_provisioning_time,
+            "download_queue_size": len(edge_server.download_queue),
+            "provisioning_bottleneck": provisioning_estimate['bottleneck'],
         })
     
     return host_candidates
 
+# ✅ CACHE GLOBAL de camadas por digest
+_LAYER_CACHE = {}
+
+def _get_layer_by_digest(digest):
+    """
+    Retorna camada usando cache.
+    Cache construído no primeiro acesso e persiste durante simulação.
+    """
+    global _LAYER_CACHE
+    
+    # Construir cache na primeira vez
+    if not _LAYER_CACHE:
+        for layer in ContainerLayer.all():
+            _LAYER_CACHE[layer.digest] = layer
+        print(f"[LAYER_CACHE] Índice construído: {len(_LAYER_CACHE)} camadas")
+    
+    return _LAYER_CACHE.get(digest)
+
+def estimate_migration_time_in_steps(target_server, service, bandwidth_mbps=100.0):
+    """
+    Estima quantos steps o Live Migration levará com base no tamanho das camadas não cacheadas.
+    Considera largura de banda da rede (padrão 100Mbps ~ 12.5 MB/s).
+    
+    ✅ COM CACHE (Opcional).
+    """
+    global _provisioning_time_cache
+    
+    # ✅ CORREÇÃO 1: Validar que target_server tem model
+    if not hasattr(target_server, 'model') or target_server.model is None:
+        return {'total_time_steps': float('inf'), 'bottleneck': 'no_model'}
+    
+    # ✅ CORREÇÃO 2: Definir cache_key LOGO NO INÍCIO
+    current_step = target_server.model.schedule.steps + 1
+    cache_key = (target_server.id, service.image_digest, current_step, 'migration')
+    
+    # ✅ Verificar cache
+    if cache_key in _provisioning_time_cache:
+        return _provisioning_time_cache[cache_key]
+    
+    # ═══════════════════════════════════════════════════════════
+    # CÁLCULO NORMAL
+    # ═══════════════════════════════════════════════════════════
+    
+    BANDWIDTH_MB_PER_SEC = bandwidth_mbps / 8.0
+    
+    # 1. Identificar imagem e camadas
+    service_image = ContainerImage.find_by(attribute_name="digest", attribute_value=service.image_digest)
+    if not service_image:
+        result = {'total_time_steps': float('inf'), 'bottleneck': 'no_image'}
+        _provisioning_time_cache[cache_key] = result  # ✅ AGORA É SEGURO
+        return result
+    
+    # ✅ OTIMIZAÇÃO: Usar cache de layers
+    service_layers = [_get_layer_by_digest(digest) 
+                     for digest in service_image.layers_digests]
+    service_layers = [l for l in service_layers if l is not None]
+    
+    # 2. Calcular tamanho total a baixar
+    total_size_mb = 0
+    for layer in service_layers:
+        is_cached = any(cached.digest == layer.digest for cached in target_server.container_layers)
+        if not is_cached:
+            total_size_mb += layer.size
+            
+    # 3. Converter para steps
+    if total_size_mb == 0:
+        result = {'total_time_steps': 2, 'bottleneck': 'cache'}
+        _provisioning_time_cache[cache_key] = result
+        return result
+        
+    estimated_steps = int(math.ceil(total_size_mb / BANDWIDTH_MB_PER_SEC)) + 2
+    
+    result = {
+        'total_time_steps': estimated_steps,
+        'total_mb_to_download': total_size_mb,
+        'bottleneck': 'bandwidth' if estimated_steps > 10 else 'none'
+    }
+    
+    # ✅ Armazenar no cache
+    _provisioning_time_cache[cache_key] = result
+    
+    return result
+
+
+_provisioning_time_cache = {}
+
+def _cleanup_provisioning_time_cache(current_step):
+    """
+    Remove entradas de steps antigos do cache de estimações.
+    Executado periodicamente para evitar crescimento de memória.
+    """
+    global _provisioning_time_cache
+    
+    if current_step % 10 == 0:  # Limpar a cada 10 steps
+        cutoff = current_step - 2  # Manter apenas últimos 2 steps
+        keys_to_remove = [k for k in _provisioning_time_cache.keys() if k[2] < cutoff]
+        
+        for key in keys_to_remove:
+            del _provisioning_time_cache[key]
+        
+        if keys_to_remove:
+            print(f"[CACHE_CLEANUP] {len(keys_to_remove)} estimações antigas removidas (total: {len(_provisioning_time_cache)})")
+            
+def estimate_provisioning_time_for_server(target_server, service, verbose=False):
+    """
+    Estima tempo total (em steps) para provisionar serviço em um servidor.
+    
+    ✅ OTIMIZAÇÃO: Cache por (servidor, imagem, step).
+    Invalida automaticamente a cada step (queue_size muda).
+    """
+    global _provisioning_time_cache
+    
+    # ✅ VALIDAÇÃO INICIAL: Garantir que server.model existe
+    if not hasattr(target_server, 'model') or target_server.model is None:
+        print(f"[ESTIMATE_PROVISIONING] ⚠️ ERRO: target_server {target_server.id} sem model")
+        return {
+            'total_time_steps': float('inf'),
+            'total_mb_to_download': 0,
+            'layers_to_download': 0,
+            'download_sources': {},
+            'bottleneck': 'no_model',
+        }
+    
+    # ✅ CORREÇÃO: Definir cache_key LOGO NO INÍCIO (antes de qualquer uso)
+    current_step = target_server.model.schedule.steps + 1
+    cache_key = (target_server.id, service.image_digest, current_step)
+    
+    # ✅ Verificar cache (AGORA cache_key já existe)
+    if cache_key in _provisioning_time_cache:
+        return _provisioning_time_cache[cache_key]
+    
+    # ═══════════════════════════════════════════════════════════
+    # CÁLCULO NORMAL
+    # ═══════════════════════════════════════════════════════════
+    
+    from simulator.extensions.edge_server_extensions import get_layer_download_config
+    config = get_layer_download_config()
+    
+    if not config["enable_registry"] and not config["enable_p2p"]:
+        result = {
+            'total_time_steps': float('inf'),
+            'total_mb_to_download': 0,
+            'layers_to_download': 0,
+            'download_sources': {},
+            'bottleneck': 'no_download_sources',
+        }
+        _provisioning_time_cache[cache_key] = result  # ✅ AGORA É SEGURO
+        return result
+    
+    service_image = ContainerImage.find_by(attribute_name="digest", attribute_value=service.image_digest)
+    if not service_image:
+        result = {'total_time_steps': float('inf'), 'bottleneck': 'no_image'}
+        _provisioning_time_cache[cache_key] = result  # ✅ AGORA É SEGURO
+        return result
+    
+    # ✅ OTIMIZAÇÃO: Usar cache de layers
+    service_layers = [_get_layer_by_digest(digest) 
+                     for digest in service_image.layers_digests]
+    service_layers = [l for l in service_layers if l is not None]  # Filtrar None
+    
+    cached_layers = [layer for layer in service_layers 
+                     if any(cached.digest == layer.digest for cached in target_server.container_layers)]
+    
+    uncached_layers = [layer for layer in service_layers 
+                       if layer not in cached_layers]
+    
+    if not uncached_layers:
+        result = {
+            'total_time_steps': 0,
+            'total_mb_to_download': 0,
+            'layers_to_download': 0,
+            'download_sources': {},
+            'bottleneck': 'cache'
+        }
+        _provisioning_time_cache[cache_key] = result
+        return result
+    
+    # ✅ OTIMIZAÇÃO: Pré-filtrar fontes disponíveis UMA VEZ
+    available_registries = []
+    available_p2p_servers = []
+    
+    if config["enable_registry"]:
+        available_registries = [
+            reg.server for reg in ContainerRegistry.all() 
+            if reg.available and reg.server
+        ]
+    
+    if config["enable_p2p"]:
+        available_p2p_servers = [
+            s for s in EdgeServer.all() 
+            if s.available and s.id != target_server.id
+        ]
+    
+    # Processar camadas
+    download_plan = {}
+    total_mb_to_download = 0
+    has_missing_layers = False
+    missing_layers_details = []
+    
+    for layer in uncached_layers:
+        sources = []
+        
+        # ✅ OTIMIZAÇÃO: Usar listas pré-filtradas
+        for server in available_registries:
+            if any(l.digest == layer.digest for l in server.container_layers):
+                sources.append(('registry', server))
+        
+        for server in available_p2p_servers:
+            if any(l.digest == layer.digest for l in server.container_layers):
+                sources.append(('p2p', server))
+        
+        if not sources:
+            has_missing_layers = True
+            missing_layers_details.append(layer.digest[:12])
+            
+            download_plan[layer.digest] = {
+                'type': 'missing',
+                'server': None,
+                'download_time': float('inf')
+            }
+            continue
+        
+        # Avaliar fontes
+        best_source = None
+        best_download_time = float('inf')
+        
+        for source_type, source_server in sources:
+            download_time = _estimate_download_time_from_source(
+                layer=layer,
+                source_server=source_server,
+                target_server=target_server,
+                source_type=source_type
+            )
+            
+            if download_time < best_download_time:
+                best_download_time = download_time
+                best_source = {
+                    'type': source_type,
+                    'server': source_server,
+                    'download_time': download_time
+                }
+        
+        download_plan[layer.digest] = best_source
+        total_mb_to_download += layer.size
+    
+    if has_missing_layers:
+        result = {
+            'total_time_steps': float('inf'),
+            'total_mb_to_download': total_mb_to_download,
+            'layers_to_download': len(uncached_layers),
+            'download_sources': download_plan,
+            'bottleneck': 'missing_layers',
+            'missing_layers': missing_layers_details,
+        }
+        _provisioning_time_cache[cache_key] = result
+        return result
+    
+    max_concurrent = target_server.max_concurrent_layer_downloads
+    current_queue_size = len(target_server.download_queue)
+    
+    if current_queue_size >= max_concurrent:
+        avg_remaining_time = _estimate_avg_remaining_download_time(target_server)
+        queue_delay = avg_remaining_time
+    else:
+        queue_delay = 0
+    
+    individual_times = [info['download_time'] for info in download_plan.values() if info['download_time'] != float('inf')]
+    
+    if not individual_times:
+        parallel_download_time = float('inf')
+    else:
+        parallel_download_time = max(individual_times)
+    
+    total_time = queue_delay + parallel_download_time
+    
+    if queue_delay > parallel_download_time:
+        bottleneck = 'download_queue'
+    elif parallel_download_time > 10:
+        bottleneck = 'bandwidth'
+    else:
+        bottleneck = 'none'
+    
+    if verbose:
+        print(f"[ESTIMATE_PROVISIONING] Servidor {target_server.id}:")
+        print(f"  Camadas cacheadas: {len(cached_layers)}/{len(service_layers)}")
+        print(f"  Camadas para baixar: {len(uncached_layers)} ({total_mb_to_download:.2f} MB)")
+        print(f"  Fila de download: {current_queue_size}/{max_concurrent}")
+        print(f"  Tempo de espera na fila: {queue_delay} steps")
+        print(f"  Tempo de download paralelo: {parallel_download_time} steps")
+        print(f"  TOTAL: {total_time} steps")
+    
+    result = {
+        'total_time_steps': int(total_time) if total_time != float('inf') else float('inf'),
+        'total_mb_to_download': total_mb_to_download,
+        'layers_to_download': len(uncached_layers),
+        'download_sources': download_plan,
+        'bottleneck': bottleneck,
+        'queue_delay': queue_delay,
+        'parallel_download_time': parallel_download_time
+    }
+    
+    # ✅ Armazenar no cache
+    _provisioning_time_cache[cache_key] = result
+    
+    return result
+
+
+
+
+# ✅ CACHE GLOBAL de métricas de caminho
+_PATH_METRICS_CACHE = {}  # {(source_switch_id, target_switch_id): {'bandwidth': X, 'delay': Y}}
+
+def _get_path_metrics(source_switch, target_switch, topology):
+    """
+    ✅ OTIMIZAÇÃO: Cache de métricas de caminho (bandwidth + delay).
+    Cache permanente durante simulação (topologia não muda).
+    """
+    global _PATH_METRICS_CACHE
+    
+    cache_key = (source_switch.id, target_switch.id)
+    
+    if cache_key in _PATH_METRICS_CACHE:
+        return _PATH_METRICS_CACHE[cache_key]
+    
+    # Calcular caminho
+    try:
+        path = nx.shortest_path(
+            G=topology,
+            source=source_switch,
+            target=target_switch,
+        )
+    except nx.NetworkXNoPath:
+        result = {'bandwidth': 0, 'delay': float('inf'), 'path': []}
+        _PATH_METRICS_CACHE[cache_key] = result
+        return result
+    
+    # Calcular métricas
+    min_bandwidth = float('inf')
+    total_delay = 0
+    
+    for i in range(len(path) - 1):
+        link_data = topology[path[i]][path[i + 1]]
+        link_bandwidth = link_data.get('bandwidth', 100)
+        link_delay = link_data.get('delay', 0)
+        
+        min_bandwidth = min(min_bandwidth, link_bandwidth)
+        total_delay += link_delay
+    
+    result = {
+        'bandwidth': min_bandwidth,
+        'delay': total_delay,
+        'path': path
+    }
+    
+    _PATH_METRICS_CACHE[cache_key] = result
+    return result
+
+
+def _estimate_download_time_from_source(layer, source_server, target_server, source_type):
+    """
+    ✅ OTIMIZAÇÃO: Usa cache de métricas de caminho.
+    """
+    topology = target_server.model.topology
+    source_switch = source_server.base_station.network_switch
+    target_switch = target_server.base_station.network_switch
+    
+    # ✅ Obter métricas do cache
+    path_metrics = _get_path_metrics(source_switch, target_switch, topology)
+    
+    if path_metrics['bandwidth'] == 0:
+        return float('inf')  # Sem caminho
+    
+    min_bandwidth = path_metrics['bandwidth']
+    total_delay = path_metrics['delay']
+    
+    # 3. Ajustar por downloads ativos
+    active_downloads_from_source = sum(
+        1 for flow in topology.graph.get('flows', [])
+        if hasattr(flow, 'source') and flow.source == source_server and flow.status == 'active'
+    )
+    
+    effective_bandwidth = min_bandwidth / max(1, active_downloads_from_source)
+    
+    # 4. Calcular tempo de download
+    bandwidth_mb_per_sec = effective_bandwidth / 8.0
+    download_time_seconds = layer.size / bandwidth_mb_per_sec
+    download_time_steps = int(download_time_seconds) + 1
+    
+    total_time = download_time_steps + total_delay
+    
+    return total_time
+
+
+def _estimate_avg_remaining_download_time(server):
+    """
+    Estima tempo médio restante dos downloads ativos no servidor.
+    """
+    if not server.download_queue:
+        return 0
+    
+    # Simplificação: assumir que downloads restantes levam 50% do tempo médio
+    avg_layer_size = 50  # MB (estimativa)
+    avg_bandwidth = 100 / 8  # MB/s (100 Mbps)
+    avg_time_per_download = avg_layer_size / avg_bandwidth
+    
+    # Tempo médio = metade do tempo de um download (já parcialmente concluído)
+    return int(avg_time_per_download / 2)
 
 # ============================================================================
 # UTILITY FUNCTIONS
@@ -1783,13 +2864,63 @@ def collect_infrastructure_metrics_for_current_step():
     metrics.add_infrastructure_metrics(step_metrics)
 
 
-def collect_sla_violations_for_current_step():
-    """Coleta as violações de SLA do step atual e acumula nas métricas globais."""
+def collect_all_sla_violations():
+    """
+    Coleta todas as violações de SLA consolidadas.
+    Retorna um dicionário com métricas agregadas.
+    """
     metrics = get_simulation_metrics()
+    consolidated = metrics.get_consolidated_metrics()
+    
+    # Calcular delay médio
+    total_delays = 0
+    delay_count = 0
     
     for user in User.all():
-        user_sla_violations = get_sla_violations(user)
-        metrics.add_sla_violations(user_sla_violations)
+        for app in user.applications:
+            app_id = str(app.id)
+            if app_id in user.delays:
+                delay = user.delays[app_id]
+                if delay != float('inf') and delay > 0:
+                    total_delays += delay
+                    delay_count += 1
+    
+    avg_delay = total_delays / delay_count if delay_count > 0 else 0
+    
+    return {
+        "total_delay_sla_violations": consolidated.get("total_delay_sla_violations", 0),
+        "delay_violations_per_delay_sla": consolidated.get("delay_violations_per_delay_sla", {}),
+        "delay_violations_per_access_pattern": consolidated.get("delay_violations_per_access_pattern", {}),
+        "total_perceived_downtime": consolidated.get("total_perceived_downtime", 0),
+        "total_perceived_downtime_per_access_pattern": consolidated.get("total_perceived_downtime_per_access_pattern", {}),
+        "total_perceived_downtime_per_delay_sla": consolidated.get("total_perceived_downtime_per_delay_sla", {}),
+        "total_downtime_sla_violations": consolidated.get("total_downtime_sla_violations", 0),
+        "apps_violations_sla_downtime": consolidated.get("apps_violations_sla_downtime", []),
+        "downtime_violations_per_access_pattern": consolidated.get("downtime_violations_per_access_pattern", {}),
+        "downtime_violations_per_delay_sla": consolidated.get("downtime_violations_per_delay_sla", {}),
+        "total_simulation_steps": consolidated.get("total_simulation_steps", 0),
+        "average_delay": avg_delay,
+    }
+
+
+def collect_all_infrastructure_metrics():
+    """
+    Coleta todas as métricas de infraestrutura consolidadas.
+    Retorna um dicionário com métricas agregadas.
+    """
+    metrics = get_simulation_metrics()
+    consolidated = metrics.get_consolidated_metrics()
+    
+    return {
+        "total_servers_per_model": consolidated.get("total_servers_per_model", {}),
+        "total_overloaded_servers": consolidated.get("total_overloaded_servers", 0),
+        "average_overall_occupation": consolidated.get("average_overall_occupation", 0),
+        "average_occupation_per_model": consolidated.get("average_occupation_per_model", {}),
+        "average_available_overall_occupation": consolidated.get("average_available_overall_occupation", 0),
+        "average_available_occupation_per_model": consolidated.get("average_available_occupation_per_model", {}),
+        "total_power_consumption": consolidated.get("total_power_consumption", 0),
+        "total_power_consumption_per_model": consolidated.get("total_power_consumption_per_model", {}),
+    }
 
 
 def topology_collect(self) -> dict:
@@ -1825,3 +2956,716 @@ def topology_collect(self) -> dict:
     }
 
     return metrics
+
+
+# ============================================================================
+# ✅ CENTRALIZAÇÃO: RASTREAMENTO DE DISPONIBILIDADE E DELAYS
+# ============================================================================
+
+def is_service_available_for_user(service, user, application, current_step):
+    """
+    Determina se um serviço está REALMENTE disponível para o usuário.
+    
+    Retorna:
+        (bool, str): (disponível?, razão_da_indisponibilidade)
+    
+    Razões possíveis:
+        - None: Disponível
+        - "user_not_accessing": Usuário não está acessando
+        - "no_server_allocated": Serviço sem servidor
+        - "server_unavailable": Servidor indisponível
+        - "migration_in_progress": Migração ativa (ÚNICA razão de migração)
+        - "service_not_available": Serviço marcado como indisponível
+    """
+    # Regra 1: Usuário deve estar acessando
+    if not is_user_accessing_application(user, application, current_step):
+        return (False, "user_not_accessing")
+    
+    # Regra 2: Serviço deve ter servidor
+    if not service.server:
+        return (False, "no_server_allocated")
+    
+    # Regra 3: Servidor deve estar disponível
+    if not service.server.available or service.server.status != "available":
+        return (False, "server_unavailable")
+    
+    # ✅ REGRA 4: Verificar migração ativa (ANTES de checar service._available)
+    if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
+        last_migration = service._Service__migrations[-1]
+        
+        if last_migration.get("end") is None:  # Migração ativa
+            from simulator.extensions.service_extensions import get_migration_config
+            config = get_migration_config()
+            
+            # ✅ LIVE MIGRATION: Serviço pode estar disponível na origem
+            if config["enable_live_migration"]:
+                origin = last_migration.get("origin")
+                
+                # Verificar se serviço ESTÁ na origem E origem disponível
+                if origin and service.server == origin and origin.available:
+                    # ✅ Disponível durante Live Migration
+                    return (True, "available_on_origin")
+            
+            # ✅ COLD MIGRATION ou CUTOVER: Sempre indisponível durante migração ativa
+            # Retornar SEMPRE "migration_in_progress" (única razão)
+            # A classificação detalhada (cold/hot, waiting/downloading) será feita em _classify_downtime_cause_v2()
+            return (False, "migration_in_progress")
+    
+    # Regra 5: Serviço deve estar marcado como disponível
+    if not service._available:
+        return (False, "service_not_available")
+    
+    # ✅ Todas as verificações passaram
+    return (True, None)
+
+
+def calculate_user_delay_for_application(user, application, current_step):
+    """
+    Calcula o delay REAL percebido pelo usuário para uma aplicação.
+    
+    REGRAS:
+    1. Se usuário NÃO está acessando: delay = 0 (não conta)
+    2. Se serviço INDISPONÍVEL: delay = inf (violação crítica)
+    3. Se serviço DISPONÍVEL: calcular delay de rede normal
+    
+    Returns:
+        tuple: (delay: float, unavailability_reason: str or None)
+    """
+    service = application.services[0]
+    
+    # Regra 1: Usuário não está acessando
+    if not is_user_accessing_application(user, application, current_step):
+        return (0, None)
+    
+    # Regra 2: Verificar disponibilidade
+    is_available, unavailability_reason = is_service_available_for_user(
+        service, user, application, current_step
+    )
+    
+    if not is_available:
+        return (float('inf'), unavailability_reason)
+    
+    # Regra 3: Serviço disponível - calcular delay normal
+    user.set_communication_path(app=application)
+    delay = user._compute_delay(app=application, metric="latency")
+    
+    return (delay, None)
+
+
+def update_all_user_delays(current_step):
+    """
+    Atualiza delays de TODOS os usuários de forma centralizada e consistente.
+    
+    Esta função DEVE SER CHAMADA por TODOS os algoritmos para garantir consistência.
+    """
+    for user in User.all():
+        for app in user.applications:
+            app_id = str(app.id)
+            
+            delay, unavailability_reason = calculate_user_delay_for_application(
+                user, app, current_step
+            )
+            
+            user.delays[app_id] = delay
+            
+            # ✅ DEBUG (opcional - pode ser removido em produção)
+            if current_step % 50 == 0 and delay != 0:
+                service = app.services[0]
+                server_info = f"Server {service.server.id}" if service.server else "No Server"
+                
+                if delay == float('inf'):
+                    print(f"[DELAY_UPDATE] User {user.id} | App {app.id}: INDISPONÍVEL ({unavailability_reason}) | {server_info}")
+                else:
+                    print(f"[DELAY_UPDATE] User {user.id} | App {app.id}: {delay:.2f} | {server_info}")
+
+
+# ============================================================================
+# ✅ CENTRALIZAÇÃO: CONTABILIZAÇÃO DE SLA VIOLATIONS (CORRIGIDA)
+# ============================================================================
+
+def collect_sla_violations_for_current_step():
+    """
+    Coleta violações de SLA de delay de forma CENTRALIZADA e CONSISTENTE.
+    
+    REGRAS CORRIGIDAS:
+    1. Se delay = inf (serviço indisponível): SEMPRE viola SLA
+    2. Se delay > delay_sla: viola SLA
+    3. Se delay ≤ delay_sla: NÃO viola
+    4. Se usuário NÃO está acessando (delay=0): NÃO conta
+    """
+    from simulator.helper_functions import get_simulation_metrics
+    
+    current_step = Topology.first().model.schedule.steps + 1
+    metrics = get_simulation_metrics()
+    
+    total_violations_this_step = 0
+    
+    for user in User.all():
+        for app in user.applications:
+            app_id = str(app.id)
+            
+            # ✅ REGRA 4: Pular se usuário não está acessando
+            if not is_user_accessing_application(user, app, current_step):
+                continue
+            
+            delay_sla = user.delay_slas.get(app_id)
+            current_delay = user.delays.get(app_id, 0)
+            
+            # ✅ OBTER ACCESS PATTERN (para contabilização correta)
+            access_pattern = user.access_patterns[app_id]
+            duration = access_pattern.duration_values[0] if access_pattern.duration_values else 0
+            
+            # ✅ REGRA 1: delay = inf SEMPRE viola
+            if current_delay == float('inf'):
+                total_violations_this_step += 1
+                
+                # Contabilizar por aplicação
+                if app_id not in metrics.delay_violations_per_application:
+                    metrics.delay_violations_per_application[app_id] = 0
+                metrics.delay_violations_per_application[app_id] += 1
+                
+                # Contabilizar por SLA
+                sla_key = str(delay_sla)
+                if sla_key not in metrics.delay_violations_per_delay_sla:
+                    metrics.delay_violations_per_delay_sla[sla_key] = 0
+                metrics.delay_violations_per_delay_sla[sla_key] += 1
+                
+                # ✅ CORREÇÃO: Contabilizar por access pattern
+                if duration not in metrics.delay_violations_per_access_pattern:
+                    metrics.delay_violations_per_access_pattern[duration] = 0
+                metrics.delay_violations_per_access_pattern[duration] += 1
+                
+                continue
+            
+            # ✅ REGRA 2: delay > sla viola
+            if current_delay > delay_sla:
+                total_violations_this_step += 1
+                
+                # Contabilizar por aplicação
+                if app_id not in metrics.delay_violations_per_application:
+                    metrics.delay_violations_per_application[app_id] = 0
+                metrics.delay_violations_per_application[app_id] += 1
+                
+                # Contabilizar por SLA
+                sla_key = str(delay_sla)
+                if sla_key not in metrics.delay_violations_per_delay_sla:
+                    metrics.delay_violations_per_delay_sla[sla_key] = 0
+                metrics.delay_violations_per_delay_sla[sla_key] += 1
+                
+                # ✅ CORREÇÃO: Contabilizar por access pattern
+                if duration not in metrics.delay_violations_per_access_pattern:
+                    metrics.delay_violations_per_access_pattern[duration] = 0
+                metrics.delay_violations_per_access_pattern[duration] += 1
+    
+    # ✅ Armazenar total
+    metrics.total_delay_sla_violations += total_violations_this_step
+    
+    # ✅ Log periódico
+    if current_step % 100 == 0:
+        print(f"[SLA_VIOLATIONS] Step {current_step}: {total_violations_this_step} violações neste step")
+        print(f"                 Total acumulado: {metrics.total_delay_sla_violations}")
+
+
+# ============================================================================
+# ✅ CENTRALIZAÇÃO: RASTREAMENTO DE DOWNTIME (CORRIGIDO)
+# ============================================================================
+
+def update_user_perceived_downtime_for_current_step(current_step):
+    """
+    Atualiza downtime percebido de forma CENTRALIZADA e CONSISTENTE.
+    
+    REGRAS CORRIGIDAS:
+    1. Downtime SOMENTE quando delay = inf E usuário está acessando
+    2. Classificar causa usando is_service_available_for_user()
+    3. Contabilizar por usuário e globalmente
+    """
+    
+    metrics = get_simulation_metrics()
+    total_downtime_this_step = 0
+    
+    print(f"\n{'='*70}")
+    print(f"[DEBUG_DOWNTIME] === MONITORANDO O DOWNTIME PERCEBIDO - STEP {current_step} ===")
+    print(f"{'='*70}")
+    
+    for user in User.all():
+        if not hasattr(user, '_perceived_downtime'):
+            user._perceived_downtime = {}
+        
+        # ✅ CORREÇÃO: Inicializar user_perceived_downtime_history
+        if not hasattr(user, 'user_perceived_downtime_history'):
+            user.user_perceived_downtime_history = {}
+        
+        for app in user.applications:
+            app_id = str(app.id)
+            service = app.services[0]
+            
+            # ✅ Inicializar histórico para este app (se não existir)
+            if app_id not in user.user_perceived_downtime_history:
+                user.user_perceived_downtime_history[app_id] = []
+            
+            # ✅ REGRA: Só conta downtime se usuário ESTÁ acessando
+            if not is_user_accessing_application(user, app, current_step):
+                # ✅ CORREÇÃO: Adicionar False ao histórico mesmo quando não está acessando
+                user.user_perceived_downtime_history[app_id].append(False)
+                continue
+            
+            # ✅ Verificar disponibilidade
+            is_available, unavailability_reason = is_service_available_for_user(
+                service, user, app, current_step
+            )
+            
+            # ✅ CORREÇÃO: Adicionar ao histórico (True = downtime, False = disponível)
+            user.user_perceived_downtime_history[app_id].append(not is_available)
+            
+            if not is_available:
+                # ✅ DOWNTIME DETECTADO
+                total_downtime_this_step += 1
+                
+                # Contabilizar por usuário (para compatibilidade)
+                if app_id not in user._perceived_downtime:
+                    user._perceived_downtime[app_id] = 0
+                user._perceived_downtime[app_id] += 1
+                
+                # ✅ Classificar causa DETALHADA
+                detailed_cause = _classify_downtime_cause_v2(
+                    user, app, service, current_step, unavailability_reason
+                )
+                
+                # Contabilizar globalmente por causa
+                if detailed_cause not in metrics.downtime_reasons:
+                    metrics.downtime_reasons[detailed_cause] = 0
+                metrics.downtime_reasons[detailed_cause] += 1
+                
+                # ✅ LOG (só primeiras ocorrências para não poluir)
+                if metrics.downtime_reasons[detailed_cause] <= 3:
+                    server_info = f"{service.server.id} (disponível: {service.server.available})" if service.server else "None"
+                    
+                    print(f"[DEBUG_DOWNTIME] User {user.id} | App {app.id} | Service {service.id}")
+                    print(f"                 Causa: {detailed_cause}")
+                    print(f"                 Delay atual: {user.delays.get(app_id, 0)}")
+                    print(f"                 Status serviço: available={service._available}")
+                    print(f"                 Servidor: {server_info}")
+    
+    # ✅ Atualizar total global
+    metrics.total_perceived_downtime += total_downtime_this_step
+    
+    print(f"{'='*70}\n")
+    
+    # ✅ Log periódico
+    if current_step % 100 == 0:
+        print(f"[DOWNTIME_SUMMARY] Step {current_step}: {total_downtime_this_step} steps de downtime neste step")
+        print(f"                   Total acumulado: {metrics.total_perceived_downtime}")
+
+
+_unclassified_cases = []
+
+def _classify_downtime_cause_v2(user, app, service, current_step, unavailability_reason):
+    """
+    Classifica a causa do downtime de forma DETALHADA e CONSISTENTE.
+    """
+    global _unclassified_cases
+    
+    # ✅ CASO 0: Serviço disponível (não é downtime)
+    if unavailability_reason in [None, "available_on_origin"]:
+        return None
+    
+    # ✅ CASO 1: Sem servidor alocado
+    if unavailability_reason == "no_server_allocated":
+        from simulator.algorithms.trust_edge_v3 import is_application_in_waiting_queue
+        
+        if is_application_in_waiting_queue(app.id):
+            return "waiting_queue_global"
+        
+        if not hasattr(service, '_Service__migrations') or len(service._Service__migrations) == 0:
+            return "provisioning_initial"
+        
+        return "server_failure_orphaned"
+    
+    # ✅ CASO 2: Servidor indisponível
+    if unavailability_reason == "server_unavailable":
+        return "server_failure_unavailable"
+    
+    # ✅ CASO 3: Migração em andamento (detectada explicitamente)
+    if unavailability_reason == "migration_in_progress":
+        if not hasattr(service, '_Service__migrations') or len(service._Service__migrations) == 0:
+            print(f"[CLASSIFY_DOWNTIME] ⚠️ BUG: 'migration_in_progress' mas sem migrações! Service {service.id}")
+            return "downtime_unclassified"
+        
+        migration = service._Service__migrations[-1]
+        origin = migration.get("origin")
+        status = migration.get("status", "unknown")
+        
+        # ✅ VALIDAÇÃO: Migração deve estar ativa (end=None)
+        if migration.get("end") is not None:
+            print(f"[CLASSIFY_DOWNTIME] ⚠️ Migração FINALIZADA mas serviço indisponível!")
+            print(f"                    Service {service.id}, Status: {status}, End: {migration.get('end')}")
+            
+            if status == "interrupted":
+                return "server_failure_orphaned"
+            
+            if status == "finished":
+                return "service_startup_delay"
+            
+            return "migration_completed_but_unavailable"
+        
+        # ✅ Determinar se é provisionamento (origin=None) ou migração
+        is_provisioning = (origin is None)
+        
+        # ✅ Obter configuração de Live Migration
+        from simulator.extensions.service_extensions import get_migration_config
+        config = get_migration_config()
+        is_live_migration_enabled = config.get("enable_live_migration", True)
+        
+        # Obter razão original da migração
+        original_reason = migration.get("original_migration_reason", "unknown")
+        
+        # ✅ VALIDAÇÃO: original_reason NÃO pode ser "unknown"
+        if original_reason == "unknown" or not original_reason:
+            print(f"[CLASSIFY_DOWNTIME] ⚠️ original_migration_reason = '{original_reason}' (Service {service.id})")
+            print(f"                    migration_reason: {migration.get('migration_reason')}")
+            print(f"                    status: {status}, origin: {origin.id if origin else 'None'}")
+            
+            migration_reason = migration.get("migration_reason", "unknown")
+            
+            if migration_reason == "server_failed":
+                if migration.get("is_cold_migration", False):
+                    original_reason = "server_failed_unpredicted"
+                else:
+                    original_reason = "low_reliability"
+            elif migration_reason in ["low_reliability", "delay_violation", "predicted_failure"]:
+                original_reason = migration_reason
+            else:
+                original_reason = migration_reason if migration_reason != "unknown" else "unclassified"
+        
+        # ─────────────────────────────────────────────────────────────
+        # PROVISIONAMENTO (origin = None)
+        # ─────────────────────────────────────────────────────────────
+        if is_provisioning:
+            if status == "waiting":
+                return "provisioning_waiting_in_download_queue"
+            
+            elif status == "pulling_layers":
+                return "provisioning_downloading_layers"
+            
+            else:
+                print(f"[CLASSIFY_DOWNTIME] ⚠️ Provisionamento com status inesperado: '{status}' (Service {service.id})")
+                return f"provisioning_{status}"
+        
+        # ─────────────────────────────────────────────────────────────
+        # MIGRAÇÃO (origin != None)
+        # ─────────────────────────────────────────────────────────────
+        else:
+            prefix = f"migration_{original_reason}"
+            
+            if status == "waiting":
+                return f"{prefix}_waiting_in_download_queue"
+            
+            elif status == "pulling_layers":
+                if is_live_migration_enabled:
+                    origin_available = origin.available if origin else False
+                    
+                    if not origin_available:
+                        return f"{prefix}_downloading_layers_cold"
+                    else:
+                        print(f"[CLASSIFY_DOWNTIME] ⚠️ Live Migration mas serviço indisponível durante download!")
+                        print(f"                    Service {service.id}, Origin {origin.id} (available={origin.available})")
+                        return f"{prefix}_downloading_layers_transition"
+                else:
+                    return f"{prefix}_downloading_layers_cold"
+            
+            elif status == "migrating_service_state":
+                return f"{prefix}_cutover"
+            
+            else:
+                print(f"[CLASSIFY_DOWNTIME] ⚠️ Migração com status inesperado: '{status}' (Service {service.id})")
+                print(f"                    Original reason: {original_reason}, Origin: {origin.id if origin else 'None'}")
+                
+                if status == "finished":
+                    return "service_startup_delay"
+                elif status == "interrupted":
+                    return "server_failure_orphaned"
+                else:
+                    return f"{prefix}_{status}"
+    
+    # ✅ CASO 4: Serviço indisponível (sem migração detectada explicitamente)
+    if unavailability_reason == "service_not_available":
+        if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
+            last_migration = service._Service__migrations[-1]
+            
+            if last_migration.get("end") is None:
+                print(f"[CLASSIFY_DOWNTIME] ⚠️ 'service_not_available' mas migração ativa! (Service {service.id})")
+                print(f"                    Status: {last_migration.get('status')}, Origin: {last_migration.get('origin')}")
+                
+                return _classify_downtime_cause_v2(user, app, service, current_step, "migration_in_progress")
+            
+            if last_migration.get("status") == "interrupted":
+                return "server_failure_orphaned"
+            
+            if last_migration.get("status") == "finished":
+                return "service_startup_delay"
+        
+        return "provisioning_initial"
+    
+    # ✅ CASO NÃO PREVISTO: CAPTURAR DETALHES COMPLETOS
+    print(f"[CLASSIFY_DOWNTIME] ⚠️⚠️⚠️ CASO NÃO CLASSIFICADO DETECTADO!")
+    print(f"                    Razão: '{unavailability_reason}' (Service {service.id}, App {app.id})")
+    print(f"                    User {user.id}, Step {current_step}")
+    
+    # ✅ CAPTURAR ESTADO COMPLETO DO SERVIÇO
+    debug_info = {
+        'step': current_step,
+        'user_id': user.id,
+        'app_id': app.id,
+        'service_id': service.id,
+        'unavailability_reason': unavailability_reason,
+        'service_available': service._available,
+        'server': service.server.id if service.server else None,
+        'server_available': service.server.available if service.server else None,
+        'has_migrations': hasattr(service, '_Service__migrations'),
+        'migrations_count': len(service._Service__migrations) if hasattr(service, '_Service__migrations') else 0,
+    }
+    
+    # ✅ DETALHES DA ÚLTIMA MIGRAÇÃO (se existir)
+    if hasattr(service, '_Service__migrations') and len(service._Service__migrations) > 0:
+        last_mig = service._Service__migrations[-1]
+        debug_info['last_migration'] = {
+            'status': last_mig.get('status'),
+            'origin': last_mig.get('origin').id if last_mig.get('origin') else None,
+            'target': last_mig.get('target').id if last_mig.get('target') else None,
+            'start': last_mig.get('start'),
+            'end': last_mig.get('end'),
+            'migration_reason': last_mig.get('migration_reason'),
+            'original_migration_reason': last_mig.get('original_migration_reason'),
+        }
+    
+    print(f"                    Debug Info: {debug_info}")
+    
+    # ✅ Armazenar para análise posterior
+    _unclassified_cases.append(debug_info)
+    
+    return "downtime_unclassified"
+
+def print_unclassified_downtime_report():
+    """
+    Imprime relatório detalhado dos casos não classificados.
+    Executar ao final da simulação para diagnóstico.
+    """
+    global _unclassified_cases
+    
+    if not _unclassified_cases:
+        print("\n✅ Nenhum caso de downtime não classificado detectado!")
+        return
+    
+    print(f"\n{'='*80}")
+    print(f"RELATÓRIO DE CASOS NÃO CLASSIFICADOS ({len(_unclassified_cases)} casos)")
+    print(f"{'='*80}\n")
+    
+    # ✅ Agrupar por 'unavailability_reason'
+    by_reason = {}
+    for case in _unclassified_cases:
+        reason = case['unavailability_reason']
+        if reason not in by_reason:
+            by_reason[reason] = []
+        by_reason[reason].append(case)
+    
+    for reason, cases in by_reason.items():
+        print(f"\n📌 Razão: '{reason}' ({len(cases)} ocorrências)")
+        print(f"   {'─'*70}")
+        
+        # Mostrar primeiros 3 casos
+        for i, case in enumerate(cases[:3], 1):
+            print(f"\n   Caso {i}:")
+            print(f"     Step: {case['step']}")
+            print(f"     Service: {case['service_id']} (User {case['user_id']}, App {case['app_id']})")
+            print(f"     service._available: {case['service_available']}")
+            print(f"     server: {case['server']} (available: {case['server_available']})")
+            print(f"     Has migrations: {case['has_migrations']} (count: {case['migrations_count']})")
+            
+            if 'last_migration' in case:
+                mig = case['last_migration']
+                print(f"     Última migração:")
+                print(f"       Status: {mig['status']}")
+                print(f"       Origin: {mig['origin']} → Target: {mig['target']}")
+                print(f"       Steps: {mig['start']} - {mig['end']}")
+                print(f"       Reason: {mig['migration_reason']} (original: {mig['original_migration_reason']})")
+        
+        if len(cases) > 3:
+            print(f"\n   ... e mais {len(cases) - 3} casos com mesma razão")
+    
+    print(f"\n{'='*80}\n")
+
+
+# ============================================================================
+# ✅ FUNÇÃO AUXILIAR: Validar Consistência de Rastreamento
+# ============================================================================
+
+def validate_tracking_consistency(current_step):
+    """
+    Valida consistência entre:
+    - user.delays
+    - service._available
+    - server.available
+    - Contadores de SLA violations
+    - Contadores de downtime
+    
+    Executar periodicamente para detectar inconsistências.
+    """
+    if current_step % 100 != 0:
+        return
+    
+    print(f"\n{'='*70}")
+    print(f"[VALIDATION] === VALIDANDO CONSISTÊNCIA - STEP {current_step} ===")
+    print(f"{'='*70}\n")
+    
+    inconsistencies = []
+    
+    for user in User.all():
+        for app in user.applications:
+            app_id = str(app.id)
+            service = app.services[0]
+            
+            if not is_user_accessing_application(user, app, current_step):
+                continue
+            
+            # ✅ Validação 1: delay = inf deve implicar serviço indisponível
+            current_delay = user.delays.get(app_id, 0)
+            is_available, _ = is_service_available_for_user(service, user, app, current_step)
+            
+            if current_delay == float('inf') and is_available:
+                inconsistencies.append({
+                    "type": "delay_availability_mismatch",
+                    "user": user.id,
+                    "app": app.id,
+                    "service": service.id,
+                    "detail": "delay=inf mas serviço marcado como disponível"
+                })
+            
+            # ✅ Validação 2: serviço disponível deve ter delay finito
+            if is_available and current_delay == float('inf'):
+                inconsistencies.append({
+                    "type": "availability_delay_mismatch",
+                    "user": user.id,
+                    "app": app.id,
+                    "service": service.id,
+                    "detail": "serviço disponível mas delay=inf"
+                })
+            
+            # ✅ Validação 3: servidor indisponível deve resultar em delay=inf
+            if service.server and not service.server.available and current_delay != float('inf'):
+                inconsistencies.append({
+                    "type": "server_unavailable_but_delay_finite",
+                    "user": user.id,
+                    "app": app.id,
+                    "service": service.id,
+                    "server": service.server.id,
+                    "delay": current_delay
+                })
+    
+    if inconsistencies:
+        print(f"[VALIDATION] ⚠️ {len(inconsistencies)} INCONSISTÊNCIAS DETECTADAS:")
+        for inc in inconsistencies[:10]:  # Mostrar primeiras 10
+            print(f"  - {inc['type']}: User {inc['user']}, App {inc['app']}, Service {inc['service']}")
+            print(f"    Detalhe: {inc.get('detail', 'N/A')}")
+        
+        if len(inconsistencies) > 10:
+            print(f"  ... e mais {len(inconsistencies) - 10} inconsistências")
+    else:
+        print(f"[VALIDATION] ✅ Nenhuma inconsistência detectada")
+    
+    print(f"\n{'='*70}\n")
+    
+    return inconsistencies
+
+
+def diagnose_downtime_sla_violations():
+    """
+    Diagnostica violações de SLA de downtime para detectar problemas.
+    Executar ao final da simulação.
+    """
+    print(f"\n{'='*70}")
+    print(f"DIAGNÓSTICO DE VIOLAÇÕES DE SLA DE DOWNTIME")
+    print(f"{'='*70}\n")
+    
+    total_sessions = 0
+    sessions_with_downtime = 0
+    sessions_violating_sla = 0
+    
+    # ✅ DEBUG: Verificar se user_perceived_downtime_history está populado
+    users_with_history = 0
+    total_history_entries = 0
+    
+    for user in User.all():
+        if hasattr(user, 'user_perceived_downtime_history') and user.user_perceived_downtime_history:
+            users_with_history += 1
+            for app_id, history in user.user_perceived_downtime_history.items():
+                total_history_entries += len(history)
+    
+    print(f"[DIAGNOSE] Usuários com histórico: {users_with_history}/{len(User.all())}")
+    print(f"[DIAGNOSE] Total de entradas de histórico: {total_history_entries}")
+    
+    if total_history_entries == 0:
+        print(f"\n⚠️⚠️⚠️ PROBLEMA CRÍTICO: user_perceived_downtime_history está VAZIO!")
+        print(f"   Isso impede o cálculo de violações de SLA de downtime por sessão.")
+        print(f"   Verifique se update_user_perceived_downtime_for_current_step() está sendo chamado a cada step.\n")
+        print(f"{'='*70}\n")
+        return
+    
+    for user in User.all():
+        for app in user.applications:
+            app_id = str(app.id)
+            
+            # Obter metadados
+            access_pattern = user.access_patterns[app_id]
+            downtime_sla = user.maximum_downtime_allowed.get(app_id, float('inf'))
+            
+            # Verificar histórico de acessos
+            if not access_pattern.history:
+                continue
+            
+            # Analisar cada sessão
+            for session in access_pattern.history:
+                session_start = session.get('start')
+                session_end = session.get('end')
+                
+                if session_start is None or session_end is None:
+                    continue
+                
+                total_sessions += 1
+                
+                # Calcular downtime desta sessão
+                session_downtime = 0
+                
+                if (hasattr(user, 'user_perceived_downtime_history') and 
+                    app_id in user.user_perceived_downtime_history):
+                    downtime_history = user.user_perceived_downtime_history[app_id]
+                    
+                    for step in range(session_start, session_end + 1):
+                        step_index = step - 1
+                        if step_index < len(downtime_history):
+                            if downtime_history[step_index]:
+                                session_downtime += 1
+                
+                if session_downtime > 0:
+                    sessions_with_downtime += 1
+                
+                if session_downtime > downtime_sla:
+                    sessions_violating_sla += 1
+                    
+                    # Log primeiras 10 violações
+                    if sessions_violating_sla <= 10:
+                        duration = session_end - session_start + 1
+                        print(f"  Violação {sessions_violating_sla}:")
+                        print(f"    User {user.id}, App {app.id}")
+                        print(f"    Sessão: steps {session_start}-{session_end} (duração: {duration})")
+                        print(f"    Downtime: {session_downtime} steps (SLA: {downtime_sla})")
+    
+    print(f"\n📊 RESUMO:")
+    print(f"  Total de sessões: {total_sessions}")
+    print(f"  Sessões com downtime: {sessions_with_downtime} ({sessions_with_downtime/total_sessions*100:.1f}% se total_sessions > 0 else 0)")
+    print(f"  Sessões violando SLA: {sessions_violating_sla} ({sessions_violating_sla/total_sessions*100:.1f}% se total_sessions > 0 else 0)")
+    
+    if sessions_violating_sla == 0 and sessions_with_downtime > 0:
+        print(f"\n⚠️ ALERTA: Há downtime mas NENHUMA violação de SLA!")
+        print(f"   Possível causa: downtime_sla muito alto ou histórico incompleto")
+    
+    print(f"\n{'='*70}\n")

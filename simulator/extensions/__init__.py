@@ -4,7 +4,7 @@ __version__ = "1.1.0"
 
 # Importing simulator extensions
 from .base_failure_model import BaseFailureGroupModel
-from .edge_server_extensions import edge_server_step, failure_history, available_history
+from .edge_server_extensions import edge_server_step, failure_history, available_history, _rebuild_layer_index
 from .application_extensions import application_step, availability_status, availability_history, downtime_history
 from .user_extensions import user_step
 from .service_extensions import service_step
@@ -21,4 +21,5 @@ __all__ = [
     "downtime_history",
     "user_step",
     "service_step",
+    "_rebuild_layer_index",
 ]

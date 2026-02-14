@@ -1,15 +1,53 @@
 # EdgeSimPy components
 from edge_sim_py.components import *
-#from simulator.algorithms.trust_edge_v3 import add_to_waiting_queue
 
 # Python libraries
 import networkx as nx
+
+
+# ═══════════════════════════════════════════════════════════════
+# ✅ CONFIGURATION FLAGS (Global - set by algorithm)
+# ═══════════════════════════════════════════════════════════════
+
+_MIGRATION_CONFIG = {
+    "enable_live_migration": True,    # Se False, usa Cold Migration (serviço sempre indisponível)
+    "enable_state_transfer": True,    # Se False, não transfere estado (sempre 0 bytes)
+}
+
+def configure_migration_strategy(enable_live_migration=True, enable_state_transfer=True):
+    """
+    Configura a estratégia de migração de serviços.
+    
+    Args:
+        enable_live_migration: Se True, mantém serviço disponível durante download de camadas
+                              Se False, serviço fica indisponível desde o início (Cold Migration)
+        enable_state_transfer: Se True, transfere estado do serviço (se state > 0)
+                              Se False, ignora estado (sempre 0 bytes)
+    """
+    global _MIGRATION_CONFIG
+    _MIGRATION_CONFIG["enable_live_migration"] = enable_live_migration
+    _MIGRATION_CONFIG["enable_state_transfer"] = enable_state_transfer
+    
+    print(f"[MIGRATION_CONFIG] Migration strategy configured:")
+    print(f"                   - Live Migration: {'ENABLED' if enable_live_migration else 'DISABLED (Cold Migration)'}")
+    print(f"                   - State Transfer: {'ENABLED' if enable_state_transfer else 'DISABLED'}")
+
+
+def get_migration_config():
+    """Retorna a configuração atual de migração."""
+    return _MIGRATION_CONFIG.copy()
+
+
+# ═══════════════════════════════════════════════════════════════
+# ✅ SERVICE STEP FUNCTION
+# ═══════════════════════════════════════════════════════════════
 
 def service_step(self):
     """Method that executes the events involving the object at each time step."""
 
     if len(self._Service__migrations) > 0 and self._Service__migrations[-1]["end"] == None:
         migration = self._Service__migrations[-1]
+        config = get_migration_config()
 
         # ✅ INICIALIZAR contador se não existir
         if "interrupted_time" not in migration:
@@ -39,39 +77,63 @@ def service_step(self):
         print(f"[SERVICE_STEP] target: {target_id_debug} (available: {target_available})")
         print(f"[SERVICE_STEP] Status da migração: {migration.get('status', 'N/A')}")
         
-# ✅ DETECÇÃO DE MIGRAÇÃO DE RECUPERAÇÃO
+        # ✅ DETECÇÃO DE MIGRAÇÃO DE RECUPERAÇÃO
         is_recovery_migration = (migration_reason == "server_failed")
         
         print(f"[SERVICE_STEP] is_recovery_migration: {is_recovery_migration}")
+        
+        # ✅ MOSTRAR CONFIGURAÇÃO (apenas primeira vez)
+        if not hasattr(migration, "_config_logged"):
+            print(f"[SERVICE_STEP] Live Migration: {'ENABLED' if config['enable_live_migration'] else 'DISABLED'}")
+            print(f"[SERVICE_STEP] State Transfer: {'ENABLED' if config['enable_state_transfer'] else 'DISABLED'}")
+            migration["_config_logged"] = True
+        
         print()
         
-        # ✅ DEBUG: Validar consistência (COM SUPORTE A LIVE MIGRATION)
+        # ✅ DEBUG: Validar consistência
         if relationships_created_by_algorithm:
             server_id = self.server.id if self.server else None
             
-            # Lógica de Live Migration:
-            # Se estamos baixando camadas (waiting/pulling) E a origem está viva,
-            # o serviço deve permanecer na origem.
-            # Caso contrário (download acabou, origem falhou, ou provisionamento), vai para o target.
-            is_downloading = migration.get("status") in ["waiting", "pulling_layers"]
-            should_be_on_origin = is_downloading and origin is not None and origin.available
+            # ═══════════════════════════════════════════════════════════
+            # LÓGICA DE LIVE MIGRATION (se habilitado)
+            # ═══════════════════════════════════════════════════════════
+            if config["enable_live_migration"]:
+                # Se estamos baixando camadas (waiting/pulling) E a origem está viva,
+                # o serviço deve permanecer na origem.
+                # Caso contrário (download acabou, origem falhou, ou provisionamento), vai para o target.
+                is_downloading = migration.get("status") in ["waiting", "pulling_layers"]
+                should_be_on_origin = is_downloading and origin is not None and origin.available
+                
+                expected_server = origin if should_be_on_origin else target
+            else:
+                # ═══════════════════════════════════════════════════════
+                # COLD MIGRATION: serviço sempre no target (ou None se provisionamento)
+                # ═══════════════════════════════════════════════════════
+                expected_server = target
             
-            expected_server = origin if should_be_on_origin else target
             expected_id_debug = expected_server.id if expected_server else "None"
 
             if self.server != expected_server:
-                print(f"[SERVICE_STEP] ⚠️ INCONSISTÊNCIA: service.server={server_id}, esperado={expected_id_debug}")
-                print(f"              Status: {migration.get('status')} | Live Migration: {should_be_on_origin}")
+                mode = "Live" if config["enable_live_migration"] else "Cold"
+                print(f"[SERVICE_STEP] ⚠️ INCONSISTÊNCIA ({mode} Migration): service.server={server_id}, esperado={expected_id_debug}")
+                print(f"              Status: {migration.get('status')}")
                 print(f"              Corrigindo automaticamente...")
                 
                 self.server = expected_server
                 if expected_server and self not in expected_server.services:
                     expected_server.services.append(self)
                 
-                # Limpeza extra para evitar duplicidade (remove do servidor onde NÃO deveria estar)
-                other_server = target if should_be_on_origin else origin
-                if other_server and self in other_server.services:
-                    other_server.services.remove(self)
+                # Limpeza extra para evitar duplicidade
+                if config["enable_live_migration"]:
+                    # Live Migration: remover do servidor onde NÃO deveria estar
+                    should_be_on_origin = migration.get("status") in ["waiting", "pulling_layers"] and origin is not None and origin.available
+                    other_server = target if should_be_on_origin else origin
+                    if other_server and self in other_server.services:
+                        other_server.services.remove(self)
+                else:
+                    # Cold Migration: garantir que está APENAS no target
+                    if origin and self in origin.services:
+                        origin.services.remove(self)
         
         # ═══════════════════════════════════════════════════════════════
         # ✅ REMOVER DETECÇÃO DE FALHA AQUI - edge_server_step() já cuida
@@ -92,9 +154,17 @@ def service_step(self):
                     
                     if not is_accessing:
                         print(f"[SERVICE_STEP] Usuário parou de acessar - cancelando migração")
+
+                        # ✅ CORREÇÃO: Usar 'self' em vez de 'service'
+                        if origin and self in origin.services:
+                            origin.services.remove(self)
+        
+                        if target and hasattr(target, 'ongoing_migrations'):
+                            target.ongoing_migrations = max(0, target.ongoing_migrations - 1)
+
                         migration["status"] = "interrupted"
                         migration["end"] = self.model.schedule.steps + 1
-                        migration["interruption_reason"] = "user_stopped_accessing"
+                        migration["interruption_reason"] = "user_stopped_accessing" 
                         
                         # ✅ INCREMENTAR TEMPO DE INTERRUPÇÃO
                         migration["interrupted_time"] += 1
@@ -103,9 +173,9 @@ def service_step(self):
                         if self in target.services:
                             target.services.remove(self)
                         
-                        # Limpar da origem
-                        if origin and self in origin.services:
-                            origin.services.remove(self)
+                        # ✅ CORREÇÃO: Remover duplicação - já foi feito acima
+                        # if origin and self in origin.services:
+                        #     origin.services.remove(self)  ← REMOVER (duplicado)
                         
                         # Liberar recursos
                         if self.server:
@@ -203,7 +273,7 @@ def service_step(self):
                 print(f"[SERVICE_STEP] Serviço {self.id}: Iniciando download de camadas")
                 print(f"              {len(layers_downloaded)} já no servidor, {len(layers_on_download_queue)} baixando")
 
-        # ✅ TRANSIÇÃO: pulling_layers → finished
+        # ✅ TRANSIÇÃO: pulling_layers → finished (ou migrating_service_state)
         if migration["status"] == "pulling_layers" and len(image.layers_digests) == len(layers_downloaded):
             print(f"[SERVICE_STEP] Serviço {self.id}: ✅ Todas as {len(image.layers_digests)} camadas no servidor!")
             
@@ -222,21 +292,60 @@ def service_step(self):
                 image.server = target
                 target.container_images.append(image)
 
-            # ✅ Liberar recursos da ORIGEM (se existir E estiver disponível)
-            if origin and origin.available:
-                origin.cpu_demand -= self.cpu_demand
-                origin.memory_demand -= self.memory_demand
-                print(f"[SERVICE_STEP] Recursos liberados da origem {origin.id}")
+            # ✅ CORREÇÃO: Validar estado da origem ANTES de liberar recursos
+            if origin:
+                # Verificar se origem ainda está disponível E o serviço está lá
+                origin_is_valid = (
+                    origin.available and 
+                    hasattr(origin, 'cpu_demand') and 
+                    hasattr(origin, 'memory_demand')
+                )
+                
+                if origin_is_valid:
+                    # ✅ Seguro: Liberar recursos
+                    origin.cpu_demand = max(0, origin.cpu_demand - self.cpu_demand)
+                    origin.memory_demand = max(0, origin.memory_demand - self.memory_demand)
+                    print(f"[SERVICE_STEP] Recursos liberados da origem {origin.id}")
+                else:
+                    # ⚠️ Origem falhou antes de liberar recursos
+                    print(f"[SERVICE_STEP] ⚠️ Origem {origin_id_debug} indisponível - recursos não liberados (já resetados pelo edge_server_step)")
             elif is_recovery_migration:
                 print(f"[SERVICE_STEP] Origem {origin_id_debug} indisponível - sem recursos para liberar")
 
-            # ✅ Para migrações de recuperação, sempre finalizar sem migrar estado
-            if is_recovery_migration or self.state == 0 or origin == None:
+            # ═══════════════════════════════════════════════════════════
+            # DECISÃO: Migrar estado ou finalizar?
+            # ═══════════════════════════════════════════════════════════
+            should_transfer_state = (
+                config["enable_state_transfer"] and  # Transferência habilitada
+                self.state > 0 and                   # Há estado para transferir
+                origin is not None and               # Origem existe
+                origin.available and                 # ✅ NOVO: Origem ainda disponível
+                not is_recovery_migration            # Não é recuperação
+            )
+            
+            if not should_transfer_state:
                 migration["status"] = "finished"
-                print(f"[SERVICE_STEP] Serviço {self.id}: Finalizando (sem estado para migrar)")
+                reason = []
+                if is_recovery_migration:
+                    reason.append("recovery migration")
+                if not config["enable_state_transfer"]:
+                    reason.append("state transfer disabled")
+                if self.state == 0:
+                    reason.append("no state to migrate")
+                if origin is None:
+                    reason.append("no origin server")
+                if origin and not origin.available:
+                    reason.append("origin failed before state transfer")  # ✅ NOVA
+                
+                reason_str = f" ({', '.join(reason)})" if reason else " (sem estado para migrar)"
+                print(f"[SERVICE_STEP] Serviço {self.id}: Finalizando{reason_str}")
             else:
                 migration["status"] = "migrating_service_state"
+                
+                # ✅ COLD MIGRATION: Serviço já está indisponível
+                # ✅ LIVE MIGRATION: Agora perde disponibilidade (cutover)
                 self._available = False
+                
                 print(f"[SERVICE_STEP] Serviço {self.id}: Iniciando migração de estado ({self.state} bytes)")
                 
                 path = nx.shortest_path(

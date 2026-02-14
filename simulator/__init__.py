@@ -35,6 +35,8 @@ from .helper_functions import (
     get_infrastructure_usage_metrics,
     collect_infrastructure_metrics_for_current_step,
     collect_sla_violations_for_current_step,
+    collect_all_sla_violations,
+    collect_all_infrastructure_metrics,
     reset_all_counters,
     topology_collect,
     get_simulation_metrics,
@@ -45,6 +47,11 @@ from .helper_functions import (
     get_user_perceived_downtime,
     get_application_downtime,
     get_application_uptime,
+    validate_tracking_consistency,
+    calculate_user_delay_for_application,
+    update_all_user_delays,
+    _classify_downtime_cause_v2,
+    diagnose_downtime_sla_violations,
     
     # Server Reliability and Trust Metrics
     get_server_total_failures,
@@ -61,6 +68,11 @@ from .helper_functions import (
     init_failure_reliability_tracking,
     record_server_failure_reliability,
     print_failure_reliability_summary,
+    estimate_weibull_parameters_from_history,
+    get_server_conditional_reliability_weibull,
+    get_cached_weibull_parameters,
+    reset_weibull_estimation_cache,
+    get_server_availability,
     
     # Application Scoring Functions
     get_application_delay_cost,
@@ -70,6 +82,9 @@ from .helper_functions import (
     # Utility Functions
     is_ongoing_failure,
     is_making_request,
+    is_service_available_for_user,
+    _cleanup_provisioning_time_cache,
+
 )
 
 __all__ = [
@@ -109,6 +124,8 @@ __all__ = [
     "get_infrastructure_usage_metrics",
     "collect_infrastructure_metrics_for_current_step",
     "collect_sla_violations_for_current_step",
+    "collect_all_sla_violations",
+    "collect_all_infrastructure_metrics",
     "reset_all_counters",
     "topology_collect",
     "get_simulation_metrics",
@@ -119,7 +136,12 @@ __all__ = [
     "get_user_perceived_downtime",
     "get_application_downtime",
     "get_application_uptime",
-    
+    "validate_tracking_consistency",
+    "calculate_user_delay_for_application",
+    "update_all_user_delays",
+    "_classify_downtime_cause_v2",
+    "diagnose_downtime_sla_violations",
+
     # Server Reliability and Trust Metrics
     "get_server_total_failures",
     "get_server_mttr",
@@ -135,6 +157,11 @@ __all__ = [
     "init_failure_reliability_tracking",
     "record_server_failure_reliability",
     "print_failure_reliability_summary",
+    "estimate_weibull_parameters_from_history",
+    "get_server_conditional_reliability_weibull",
+    "get_cached_weibull_parameters",
+    "reset_weibull_estimation_cache",
+    "get_server_availability",
     
     # Application Scoring Functions
     "get_application_delay_cost",
@@ -144,4 +171,6 @@ __all__ = [
     # Utility Functions
     "is_ongoing_failure",
     "is_making_request",
+    "is_service_available_for_user",
+    "_cleanup_provisioning_time_cache",
 ]

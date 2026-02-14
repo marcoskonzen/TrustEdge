@@ -13,7 +13,91 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import json
 import copy
+import numpy as np
+from scipy import stats
 
+
+# ============================================================================
+# WEIBULL/LOGNORMAL FAILURE GENERATION
+# ============================================================================
+
+def generate_weibull_lognormal_failure_trace(
+    weibull_ttf_params: dict,
+    lognormal_ttr_params: dict,
+    simulation_duration: int,
+    initial_offset: int = -50000,
+    time_to_boot: int = 10,
+    seed_value: int = None
+) -> list:
+    """
+    Gera trace de falhas usando Weibull (TTF) + Lognormal (TTR).
+    
+    Args:
+        weibull_ttf_params: {'shape': c, 'scale': λ}
+        lognormal_ttr_params: {'shape': σ, 'scale': exp(μ)}
+        simulation_duration: Duração máxima em steps (e.g., 1000)
+        initial_offset: Offset inicial (negativo para histórico)
+        time_to_boot: Tempo de boot após reparo
+        seed_value: Seed para reprodutibilidade (opcional)
+    
+    Returns:
+        Lista de grupos de falhas no formato BaseFailureGroupModel
+    """
+    if seed_value is not None:
+        np.random.seed(seed_value)
+    
+    # Extrair parâmetros
+    ttf_shape = weibull_ttf_params['shape']    # c (beta)
+    ttf_scale = weibull_ttf_params['scale']    # λ (eta)
+    
+    ttr_sigma = lognormal_ttr_params['shape']  # σ
+    ttr_scale = lognormal_ttr_params['scale']  # exp(μ)
+    
+    failure_trace = []
+    current_time = initial_offset
+    
+    # Gerar falhas até cobrir a duração desejada
+    while current_time < simulation_duration:
+        # 1. Gerar TTF usando Weibull
+        ttf = stats.weibull_min.rvs(c=ttf_shape, scale=ttf_scale, loc=0, size=1)[0]
+        ttf = max(ttf, 1.0)  # Garantir positivo
+        
+        # 2. Calcular tempo de início da falha
+        failure_starts_at = int(current_time + ttf)
+        
+        # 3. Gerar TTR usando Lognormal
+        ttr = stats.lognorm.rvs(s=ttr_sigma, scale=ttr_scale, loc=0, size=1)[0]
+        ttr = max(ttr, 1.0)  # Garantir positivo
+        ttr = min(ttr, 150)  # Limitar máximo
+        
+        # 4. Calcular timestamps completos
+        failure_ends_at = failure_starts_at + int(ttr) - 1
+        starts_booting_at = failure_ends_at + 1
+        finishes_booting_at = starts_booting_at + time_to_boot - 1
+        becomes_available_at = finishes_booting_at + 1
+        
+        # 5. Criar registro de falha
+        failure = {
+            "failure_starts_at": failure_starts_at,
+            "failure_duration": int(ttr),
+            "failure_ends_at": failure_ends_at,
+            "starts_booting_at": starts_booting_at,
+            "finishes_booting_at": finishes_booting_at,
+            "becomes_available_at": becomes_available_at,
+        }
+        
+        # Adicionar como grupo de falha individual (compatível com estrutura atual)
+        failure_trace.append([failure])
+        
+        # Avançar tempo
+        current_time = becomes_available_at
+    
+    return failure_trace
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
 def display_topology(topology: object, output_filename: str = "topology"):
     """Prints the network topology to an output file.
@@ -101,6 +185,11 @@ def edge_server_to_dict(self) -> dict:
 
 
 def user_to_dict(self) -> dict:
+    """Method that overrides the way the object is formatted to JSON."
+
+    Returns:
+        dict: JSON-friendly representation of the object as a dictionary.
+    """
     access_patterns = {}
     for app_id, access_pattern in self.access_patterns.items():
         access_patterns[app_id] = {"class": access_pattern.__class__.__name__, "id": access_pattern.id}
@@ -127,6 +216,10 @@ def user_to_dict(self) -> dict:
     return dictionary
 
 
+# ============================================================================
+# DATASET CREATION
+# ============================================================================
+
 # Defining a seed value to enable reproducibility
 seed(0)
 
@@ -144,6 +237,7 @@ for coordinates_id, coordinates in enumerate(map_coordinates):
     network_switch = sample_switch()
     base_station._connect_to_network_switch(network_switch=network_switch)
     base_station.has_registry = False  # This attribute will be properly defined later
+
 # Creating a partially-connected mesh network topology
 partially_connected_hexagonal_mesh(
     network_nodes=NetworkSwitch.all(),
@@ -157,6 +251,10 @@ partially_connected_hexagonal_mesh(
     ],
 )
 
+# ============================================================================
+# EDGE SERVER SPECIFICATIONS WITH WEIBULL/LOGNORMAL PARAMETERS
+# ============================================================================
+
 SERVERS_PER_SPEC = 10
 edge_server_specifications = [
     {
@@ -169,6 +267,19 @@ edge_server_specifications = [
         "max_power_consumption": 243,
         # Failure-related parameters:
         "time_to_boot": 10,
+        
+        # ✅ NOVO: Modelo Weibull/Lognormal
+        "use_weibull_lognormal": True,
+        "weibull_ttf_params": {
+            "shape": 1.2,      # c (beta) - Leve desgaste
+            "scale": 200,      # λ (eta) - MTBF ~200 steps
+        },
+        "lognormal_ttr_params": {
+            "shape": 0.5,      # σ - Variabilidade moderada
+            "scale": 50,       # exp(μ) - MTTR mediano ~50 steps
+        },
+        
+        # ⚠️ MANTER: Compatibilidade com fallback uniforme
         "initial_failure_time_step": randint(1, 20),
         "number_of_failures": {"lower_bound": 1, "upper_bound": 5},
         "failure_duration": {"lower_bound": 50, "upper_bound": 100},
@@ -185,6 +296,19 @@ edge_server_specifications = [
         "max_power_consumption": 1387,
         # Failure-related parameters:
         "time_to_boot": 10,
+        
+        # ✅ NOVO: SGI - Taxa constante (Exponencial, β=1)
+        "use_weibull_lognormal": True,
+        "weibull_ttf_params": {
+            "shape": 1.0,      # c = 1 → Exponencial (taxa constante)
+            "scale": 300,      # MTBF ~300 steps
+        },
+        "lognormal_ttr_params": {
+            "shape": 0.3,      # σ - Baixa variabilidade
+            "scale": 30,       # MTTR ~30 steps
+        },
+        
+        # ⚠️ MANTER: Compatibilidade
         "initial_failure_time_step": randint(1, 30),
         "number_of_failures": {"lower_bound": 2, "upper_bound": 4},
         "failure_duration": {"lower_bound": 10, "upper_bound": 50},
@@ -201,6 +325,19 @@ edge_server_specifications = [
         "max_power_consumption": 276,
         # Failure-related parameters:
         "time_to_boot": 5,
+        
+        # ✅ NOVO: Proliant - Desgaste (β > 1)
+        "use_weibull_lognormal": True,
+        "weibull_ttf_params": {
+            "shape": 1.5,      # c > 1 → Desgaste (aging)
+            "scale": 400,      # MTBF ~400 steps
+        },
+        "lognormal_ttr_params": {
+            "shape": 0.2,      # σ - Muito baixa variabilidade
+            "scale": 20,       # MTTR ~20 steps
+        },
+        
+        # ⚠️ MANTER: Compatibilidade
         "initial_failure_time_step": randint(1, 100),
         "number_of_failures": {"lower_bound": 1, "upper_bound": 2},
         "failure_duration": {"lower_bound": 10, "upper_bound": 20},
@@ -217,6 +354,9 @@ edge_server_specifications = [
         "max_power_consumption": 15,
         # Failure-related parameters:
         "time_to_boot": 1,
+        
+        # ✅ Jetson TX2: SEM FALHAS
+        "use_weibull_lognormal": False,
         "initial_failure_time_step": float("inf"),  # This server will never fail
         "number_of_failures": {"lower_bound": 0, "upper_bound": 0},
         "failure_duration": {"lower_bound": 0, "upper_bound": 0},
@@ -225,9 +365,13 @@ edge_server_specifications = [
     },
 ]
 
+# ============================================================================
+# CREATING EDGE SERVERS WITH WEIBULL/LOGNORMAL FAILURES
+# ============================================================================
+
 # Creating edge servers
 for spec in edge_server_specifications:
-    for _ in range(spec["number_of_objects"]):
+    for server_index in range(spec["number_of_objects"]):
         # Creating an edge server
         server = EdgeServer()
         server.model_name = spec["model_name"]
@@ -257,51 +401,130 @@ for spec in edge_server_specifications:
         server.status = "available"
         server.available = True
 
+        # ═══════════════════════════════════════════════════════════════════
+        # FAILURE TRACE GENERATION
+        # ═══════════════════════════════════════════════════════════════════
+        
         # Defining the failure trace
-        initial_failure_time_step = spec["initial_failure_time_step"]
-        if server.model_name != "Jetson TX2":
-            initial_failure_time_step = -2550
-        
-        print(f"[LOG] Creating failure model for {server.model_name} with initial_failure_time_step: {initial_failure_time_step}")
-        
-        BaseFailureGroupModel(
-            device=server,
-            initial_failure_time_step=initial_failure_time_step,
-            failure_characteristics={
-                "number_of_failures": spec["number_of_failures"],
-                "failure_duration": spec["failure_duration"],
-                "interval_between_failures": spec["interval_between_failures"],
-                "interval_between_sets": spec["interval_between_sets"],
-            },
-            number_of_failure_groups_to_create=50 if server.model_name != "Jetson TX2" else 0,  # The Jetson TX2 server will never fail
-        )
-        # Creating the failure history (only for failures that started before the simulation began - "becomes_available_at" < 0)
-        # and defining status and availability according to failure history.
-        should_halt_failure_loops = False
-        server.failure_model.failure_history = []
-        for failure_group in server.failure_model.failure_trace:
-            if should_halt_failure_loops:
-                break
-            for failure in failure_group:
-                if failure["becomes_available_at"] < 0:
-                    server.failure_model.failure_history.append(failure)
-                else:
-                    if failure["starts_booting_at"] <= 0 and failure["finishes_booting_at"] > 0:
-                        server.status = "booting"
-                        server.available = False
-                    elif failure["failure_starts_at"] <= 0:
-                        server.status = "failing"
-                        server.available = False
-                    # print("\n")
-                    # print(server)
-                    # print(server.status)
-                    # print(server.available)
-                    
-                    # print(failure)
-                    # print("\n")
-                    should_halt_failure_loops = True
-                    break
+        if spec.get("use_weibull_lognormal", False) and server.model_name != "Jetson TX2":
+            # ✅ USAR WEIBULL/LOGNORMAL
+            print(f"[LOG] Creating Weibull/Lognormal failure model for {server.model_name} (Server ID {server.id})")
+            print(f"      Weibull TTF: shape={spec['weibull_ttf_params']['shape']}, scale={spec['weibull_ttf_params']['scale']}")
+            print(f"      Lognormal TTR: shape={spec['lognormal_ttr_params']['shape']}, scale={spec['lognormal_ttr_params']['scale']}")
+            
+            # Gerar trace completo até 1000 steps
+            failure_trace = generate_weibull_lognormal_failure_trace(
+                weibull_ttf_params=spec['weibull_ttf_params'],
+                lognormal_ttr_params=spec['lognormal_ttr_params'],
+                simulation_duration=1000,  # ← PRÉ-GERAR ATÉ 1000 STEPS
+                initial_offset=-50000,
+                time_to_boot=spec['time_to_boot'],
+                seed_value=server_index  # ← Seed único por servidor
+            )
+            
+            # Criar modelo de falhas com trace pré-gerado
+            failure_model = BaseFailureGroupModel(
+                device=server,
+                initial_failure_time_step=-50000,
+                failure_characteristics=spec,
+                number_of_failure_groups_to_create=0
+            )
+            
+            # Injetar o trace completo
+            failure_model.failure_trace = failure_trace
+            
+            failure_model.failure_history = [
+                failure for group in failure_trace 
+                for failure in group 
+                if failure["becomes_available_at"] <= 0
+            ]
+            
+            # Métricas de validação
+            print(f"      Generated {len(failure_trace)} failures (history: {len(failure_model.failure_history)})")
+            
+            # Atualizar status do servidor no step 0 (inicialização)
+            # Verifica se existe alguma falha ATIVA cruzando o step 0
+            ongoing_failure = next(
+                (failure for group in failure_trace for failure in group
+                 if failure["failure_starts_at"] <= 0 < failure["becomes_available_at"]),
+                None
+            )
+            
+            if ongoing_failure:
+                # Servidor começa a simulação indisponível
+                if ongoing_failure["starts_booting_at"] <= 0 < ongoing_failure["finishes_booting_at"]:
+                    server.status = "booting"
+                    server.available = False
+                    print(f"      Status: BOOTING at step 0 (Recovering at {ongoing_failure['becomes_available_at']})")
+                elif ongoing_failure["failure_starts_at"] <= 0:
+                    server.status = "failing"
+                    server.available = False
+                    print(f"      Status: FAILING at step 0 (Recovering at {ongoing_failure['becomes_available_at']})")
+            else:
+                server.status = "available"
+                server.available = True
 
+        elif server.model_name == "Jetson TX2":
+            # ✅ JETSON TX2: SEM FALHAS
+            print(f"[LOG] Creating NO-FAILURE model for {server.model_name} (Server ID {server.id})")
+            
+            BaseFailureGroupModel(
+                device=server,
+                initial_failure_time_step=float("inf"),
+                failure_characteristics={
+                    "number_of_failures": {"lower_bound": 0, "upper_bound": 0},
+                    "failure_duration": {"lower_bound": 0, "upper_bound": 0},
+                    "interval_between_failures": {"lower_bound": 0, "upper_bound": 0},
+                    "interval_between_sets": float("inf"),
+                },
+                number_of_failure_groups_to_create=0  # The Jetson TX2 server will never fail
+            )
+        
+        else:
+            # ⚠️ FALLBACK: MODELO UNIFORME ANTIGO (caso use_weibull_lognormal=False)
+            print(f"[LOG] Creating UNIFORM failure model for {server.model_name} (Server ID {server.id})")
+            
+            initial_failure_time_step = spec["initial_failure_time_step"]
+            if server.model_name != "Jetson TX2":
+                initial_failure_time_step = -50000
+            
+            BaseFailureGroupModel(
+                device=server,
+                initial_failure_time_step=initial_failure_time_step,
+                failure_characteristics={
+                    "number_of_failures": spec["number_of_failures"],
+                    "failure_duration": spec["failure_duration"],
+                    "interval_between_failures": spec["interval_between_failures"],
+                    "interval_between_sets": spec["interval_between_sets"],
+                },
+                number_of_failure_groups_to_create=50 if server.model_name != "Jetson TX2" else 0
+            )
+            
+            # Creating the failure history (only for failures that started before the simulation began - "becomes_available_at" < 0)
+            # and defining status and availability according to failure history.
+            should_halt_failure_loops = False
+            server.failure_model.failure_history = []
+            for failure_group in server.failure_model.failure_trace:
+                if should_halt_failure_loops:
+                    break
+                for failure in failure_group:
+                    if failure["becomes_available_at"] < 0:
+                        server.failure_model.failure_history.append(failure)
+                    else:
+                        if failure["starts_booting_at"] <= 0 and failure["finishes_booting_at"] > 0:
+                            server.status = "booting"
+                            server.available = False
+                        elif failure["failure_starts_at"] <= 0:
+                            server.status = "failing"
+                            server.available = False
+                        
+                        should_halt_failure_loops = True
+                        break
+
+
+# ============================================================================
+# CONTAINER INFRASTRUCTURE
+# ============================================================================
 
 #display_topology(topology=Topology.first())
 for base_station in BaseStation.all():
@@ -488,7 +711,11 @@ for index, registry_spec in enumerate(container_registry_specifications):
     
     print(f"{'='*80}\n")
 
-# 3GPP. “5G; Service requirements for the 5G system (3GPP TS 22.261 version 16.16.0 Release 16)”,
+# ============================================================================
+# APPLICATION AND USER CREATION
+# ============================================================================
+
+# 3GPP. "5G; Service requirements for the 5G system (3GPP TS 22.261 version 16.16.0 Release 16)",
 # Technical specification (ts), 3rd Generation Partnership Project (3GPP), 2022, 72p.
 # https://www.etsi.org/deliver/etsi_ts/122200_122299/122261/16.16.00_60/ts_122261v161600p.pdf
 delay_slas = [
@@ -496,8 +723,8 @@ delay_slas = [
     30,  # Remote surgery (page 52)
 ]
 maximum_downtime_allowed_specifications = [
-    100,
-    200,
+    6,
+    30,
 ]
 
 SERVICES_PER_SPEC = 6
@@ -513,7 +740,7 @@ access_pattern_specifications = [
     },
     {
         "class": CircularDurationAndIntervalAccessPattern,
-        "duration_values": [60, 100],  # How long the user will access the application at each call (Long-lived applications)
+        "duration_values": [90, 100],  # How long the user will access the application at each call (Long-lived applications)
         "interval_values": [40, 40],  # Interval (in time steps) between the user accesses
     },
 ]
@@ -632,9 +859,10 @@ for user in User.all():
         user.set_communication_path(app=application)
 
 
-###############################################
-#### WRAPPING UP AND EXPORTING THE DATASET ####
-###############################################
+# ============================================================================
+# WRAPPING UP AND EXPORTING THE DATASET
+# ============================================================================
+
 # Displaying the scenario's base information
 show_scenario_overview()
 
@@ -647,3 +875,14 @@ ComponentManager.export_scenario(save_to_file=True, file_name="dataset_extended"
 
 # Exporting the topology representation to an image file
 #display_topology(topology=Topology.first())
+
+print("\n" + "="*80)
+print("DATASET GENERATION COMPLETED WITH WEIBULL/LOGNORMAL FAILURES")
+print("="*80)
+print(f"Total Edge Servers: {len(EdgeServer.all())}")
+print(f"  - Using Weibull/Lognormal: {sum(1 for s in EdgeServer.all() if s.model_name != 'Jetson TX2')}")
+print(f"  - Without failures (Jetson TX2): {sum(1 for s in EdgeServer.all() if s.model_name == 'Jetson TX2')}")
+print(f"Total Users: {len(User.all())}")
+print(f"Total Applications: {len(Application.all())}")
+print(f"Total Services: {len(Service.all())}")
+print("="*80 + "\n")

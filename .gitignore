@@ -164,3 +164,4 @@ cython_debug/
 .venv/
 .history/
 .DS_Store
+.statistics_analisys_scripts/
